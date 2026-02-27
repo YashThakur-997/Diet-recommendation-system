@@ -1,11 +1,31 @@
-import './App.css'
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
 import { HeroSection } from './components/HeroSection'
+import { Dashboard } from './components/Dashboard'
+import { MealPlan } from './components/MealPlan'
+import './App.css'
+
+function AnimatedRoutes() {
+  const location = useLocation()
+
+  return (
+    <AnimatePresence mode="wait">
+      <Routes location={location} key={location.pathname}>
+        <Route path="/" element={<HeroSection />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/meal-plan" element={<MealPlan />} />
+      </Routes>
+    </AnimatePresence>
+  )
+}
 
 function App() {
   return (
-    <div className="app">
-      <HeroSection />
-    </div>
+    <BrowserRouter>
+      <div className="app bg-background-light dark:bg-background-dark min-h-screen">
+        <AnimatedRoutes />
+      </div>
+    </BrowserRouter>
   )
 }
 
