@@ -72,6 +72,94 @@ const signup_handler = async (req, res, next) => {
     }
 };
 
+// ─── Get Profile (authenticated) ─────────────────────────────────────────────
+const get_profile_handler = async (req, res, next) => {
+    try {
+        // req.user is set by the auth middleware (contains id, email from JWT)
+        const user = await UserModel.findById(req.user.id).select("-password");
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.status(200).json({
+            success: true,
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email,
+                age: user.age,
+                gender: user.gender,
+                height: user.height,
+                weight: user.weight,
+                bmi: user.bmi,
+                calories: user.calories,
+                medicalConditions: user.medicalConditions,
+                dietaryPreferences: user.dietaryPreferences,
+                activityLevel: user.activityLevel,
+                cuisinePreferences: user.cuisinePreferences,
+                primaryGoal: user.primaryGoal,
+                sleepHours: user.sleepHours,
+                allergies: user.allergies,
+                budget: user.budget,
+                createdAt: user.createdAt,
+            },
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
+// ─── Update Profile (authenticated) ──────────────────────────────────────────
+const update_profile_handler = async (req, res, next) => {
+    try {
+        const userId = req.user.id;
+
+        // Whitelist: only allow these fields to be updated (never password/email/username)
+        const allowedFields = [
+            'age', 'gender', 'bloodGroup',
+            'height', 'weight', 'bmi',
+            'medicalConditions', 'allergies', 'medicalNotes',
+            'primaryGoal', 'activityLevel', 'sleepHours',
+            'dietaryType', 'dietaryPreferences', 'cuisinePreferences',
+            'budget', 'mealsPerDay', 'calories',
+        ];
+
+        const updates = {};
+        for (const field of allowedFields) {
+            if (req.body[field] !== undefined) {
+                updates[field] = req.body[field];
+            }
+        }
+
+        // Auto-calculate BMI if weight and height are provided
+        const weight = updates.weight ?? (await UserModel.findById(userId))?.weight;
+        const height = updates.height ?? (await UserModel.findById(userId))?.height;
+        if (weight && height) {
+            const heightM = height / 100;
+            updates.bmi = parseFloat((weight / (heightM * heightM)).toFixed(1));
+        }
+
+        const updatedUser = await UserModel.findByIdAndUpdate(
+            userId,
+            { $set: updates },
+            { new: true, runValidators: true }
+        ).select('-password');
+
+        if (!updatedUser) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Profile updated successfully",
+            user: updatedUser,
+        });
+    } catch (err) {
+        next(err);
+    }
+};
+
 // ─── Logout ───────────────────────────────────────────────────────────────────
 const logout_handler = (_req, res) => {
     res.clearCookie("token");
@@ -79,4 +167,4 @@ const logout_handler = (_req, res) => {
     res.status(200).json({ success: true, message: "Logged out successfully" });
 };
 
-module.exports = { login_handler, signup_handler, logout_handler };
+module.exports = { login_handler, signup_handler, logout_handler, get_profile_handler, update_profile_handler };
