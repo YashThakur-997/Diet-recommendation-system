@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff, User, Leaf } from 'lucide-react'
 
 export function SignUp() {
-    const [name, setName] = useState('')
+    const [username, setUsername] = useState('')
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [confirmPassword, setConfirmPassword] = useState('')
@@ -12,7 +12,7 @@ export function SignUp() {
     const navigate = useNavigate()
 
     const handleSignUp = () => {
-        if (!name || !email || !password || !confirmPassword) {
+        if (!username || !email || !password || !confirmPassword) {
             setError('Please fill in all fields')
             return
         }
@@ -21,12 +21,28 @@ export function SignUp() {
             return
         }
 
-        localStorage.setItem('nutriai_user', JSON.stringify({
-            email,
-            name,
-            loggedIn: true
-        }))
-        navigate('/health-profile')
+        fetch('/api/auth/signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, email, password })
+        })
+            .then(res => {
+                if (!res.ok && res.headers.get('content-type')?.includes('application/json') === false) {
+                    throw new Error(`Server error: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    navigate('/signin');
+                } else {
+                    setError(data.message || 'Signup failed. Please try again.');
+                }
+            })
+            .catch(err => {
+                console.error('Signup error:', err);
+                setError('Unable to connect to the server. Please try again later.');
+            });
     }
 
     return (
@@ -83,9 +99,9 @@ export function SignUp() {
                             <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-[#52525b]" />
                             <input
                                 type="text"
-                                placeholder="Full Name"
-                                value={name}
-                                onChange={e => setName(e.target.value)}
+                                placeholder="Username"
+                                value={username}
+                                onChange={e => setUsername(e.target.value)}
                                 className="w-full h-[52px] bg-[#1c1c1c] border border-[#2d2d2d] rounded-full pl-11 pr-4 text-[14px] text-[#e4e4e7] placeholder:text-[#52525b] focus:outline-none focus:border-[#22c55e] focus:border-[1.5px] transition-all"
                             />
                         </div>
