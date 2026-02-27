@@ -110,9 +110,9 @@ export function HeroSection() {
     <PageWrapper>
       {/* Landing Page Navbar */}
       <nav className="fixed top-0 left-0 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 h-16 z-50 flex items-center justify-between px-6 lg:px-10">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-green-500" style={{ fontSize: '28px' }}>eco</span>
-          <span className="font-bold text-xl text-slate-800 tracking-tight">NutriAI</span>
+        <div className="flex items-center gap-2.5">
+          <img src="/favicon.jpg" alt="NutriAI" className="w-10 h-10 rounded-lg object-cover shadow-sm border border-slate-200/50" />
+          <span className="font-black text-2xl text-slate-800 tracking-tight">NutriAI</span>
         </div>
         <div className="flex items-center gap-4">
           <button onClick={() => navigate('/signin')} className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</button>

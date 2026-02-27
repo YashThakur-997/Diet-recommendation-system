@@ -13,11 +13,9 @@ export function Sidebar() {
         <aside className="w-64 h-full bg-[#ffffff] border-r border-slate-200 flex flex-col shrink-0 transition-colors duration-300">
             {/* Logo Area */}
             <div className="p-6 flex items-center gap-3">
-                <div className="bg-[#f0fdf4] rounded-xl p-2">
-                    <span className="material-symbols-outlined text-[#22c55e]" style={{ fontSize: '28px' }}>eco</span>
-                </div>
+                <img src="/favicon.jpg" alt="NutriAI" className="w-[46px] h-[46px] rounded-xl object-cover shadow-sm border border-slate-200/50" />
                 <div>
-                    <h1 className="text-[#0f172a] text-lg font-bold leading-none">NutriAI</h1>
+                    <h1 className="text-[#0f172a] text-2xl font-black leading-none tracking-tight">NutriAI</h1>
                     <p className="text-[#64748b] text-xs font-medium">Premium Health</p>
                 </div>
             </div>
