@@ -1,0 +1,673 @@
+/* ═══════════════════════════════════════════════════════════
+   NutriAI Hero Section — HeroSection.css
+   ═══════════════════════════════════════════════════════════ */
+
+/* ── Base layout ─────────────────────────────────────── */
+.hero-section {
+  position: relative;
+  width: 100%;
+  min-height: 100dvh;
+  background: #f8fdf9;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5rem 1.5rem 3rem;
+  box-sizing: border-box;
+  font-family: 'Inter', 'Outfit', system-ui, sans-serif;
+}
+
+/* ── Glow blobs ──────────────────────────────────────── */
+.hero-blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.hero-blob-1 {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #bbf7d0, #4ade80);
+  top: -160px;
+  right: -100px;
+  animation: blobFloat 9s ease-in-out infinite;
+}
+
+.hero-blob-2 {
+  width: 400px;
+  height: 400px;
+  background: radial-gradient(circle, #d1fae5, #6ee7b7);
+  bottom: -80px;
+  left: -60px;
+  animation: blobFloat 12s ease-in-out infinite reverse;
+}
+
+.hero-blob-3 {
+  width: 300px;
+  height: 300px;
+  background: radial-gradient(circle, #fef9c3, #fde68a);
+  top: 30%;
+  left: 30%;
+  opacity: 0.18;
+  animation: blobFloat 15s ease-in-out infinite 3s;
+}
+
+@keyframes blobFloat {
+
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+
+  33% {
+    transform: translate(20px, -30px) scale(1.04);
+  }
+
+  66% {
+    transform: translate(-15px, 20px) scale(0.97);
+  }
+}
+
+/* ── Inner two-column grid ───────────────────────────── */
+.hero-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+  max-width: 1180px;
+  width: 100%;
+  align-items: center;
+}
+
+/* ══════════════════════════════════════════════════════
+   LEFT COLUMN
+   ══════════════════════════════════════════════════════ */
+.hero-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+/* pill */
+.hero-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #bbf7d0;
+  width: fit-content;
+  animation: fadeSlideUp 0.7s ease both;
+}
+
+.hero-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 #22c55e88;
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px #22c55e00;
+  }
+}
+
+/* headline */
+.hero-headline {
+  font-size: clamp(2.4rem, 4.5vw, 3.8rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin: 0;
+  animation: fadeSlideUp 0.75s ease 0.1s both;
+}
+
+.hero-headline-dark {
+  color: #111827;
+}
+
+.hero-headline-gradient {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 40%, #15803d 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* subtext */
+.hero-subtext {
+  font-size: clamp(1rem, 1.6vw, 1.125rem);
+  color: #4b5563;
+  line-height: 1.65;
+  max-width: 480px;
+  margin: 0;
+  animation: fadeSlideUp 0.8s ease 0.18s both;
+}
+
+/* CTA button */
+.hero-cta {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0.85rem 2rem;
+  border-radius: 999px;
+  width: fit-content;
+  box-shadow: 0 4px 20px #22c55e55;
+  transition: transform 0.2s, box-shadow 0.2s;
+  animation: fadeSlideUp 0.85s ease 0.26s both, ctaPulse 3s ease-in-out 1.5s infinite;
+}
+
+.hero-cta:hover {
+  transform: translateY(-2px) scale(1.03);
+  box-shadow: 0 8px 30px #22c55e77;
+}
+
+.hero-cta:active {
+  transform: scale(0.98);
+}
+
+@keyframes ctaPulse {
+
+  0%,
+  100% {
+    box-shadow: 0 4px 20px #22c55e55;
+  }
+
+  50% {
+    box-shadow: 0 4px 32px #22c55e99, 0 0 0 6px #22c55e18;
+  }
+}
+
+/* trust badge */
+.hero-trust {
+  font-size: 0.8rem;
+  color: #6b7280;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  animation: fadeSlideUp 0.9s ease 0.34s both;
+}
+
+/* stats */
+.hero-stats {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  margin-top: 0.4rem;
+  animation: fadeSlideUp 0.95s ease 0.4s both;
+}
+
+.hero-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.hero-stat-value {
+  font-size: clamp(1.2rem, 2vw, 1.5rem);
+  font-weight: 800;
+  color: #111827;
+}
+
+.hero-stat-label {
+  font-size: 0.7rem;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hero-stat-divider {
+  width: 1px;
+  height: 36px;
+  background: #e5e7eb;
+}
+
+/* ══════════════════════════════════════════════════════
+   RIGHT COLUMN — food field
+   ══════════════════════════════════════════════════════ */
+.hero-right {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 520px;
+}
+
+.food-field {
+  position: relative;
+  width: 100%;
+  max-width: 500px;
+  height: 520px;
+}
+
+/* ── BACKGROUND FLOATING ITEMS ───────────────────────── */
+/* 5×3 grid of positions, randomised via CSS custom prop --i */
+.food-bg-item {
+  position: absolute;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #fff;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
+  animation: floatItem calc(6s + (var(--i) * 0.4s)) ease-in-out infinite calc(var(--i) * -0.45s);
+  z-index: 0;
+  opacity: 0.82;
+  transition: opacity 0.3s;
+}
+
+.food-bg-item:hover {
+  opacity: 1;
+  z-index: 2;
+}
+
+.food-bg-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+/* Stagger rows to avoid overlap */
+.food-bg-item:nth-child(5n+1) {
+  top: 5%;
+  left: 0%;
+}
+
+.food-bg-item:nth-child(5n+2) {
+  top: 5%;
+  left: 75%;
+}
+
+.food-bg-item:nth-child(5n+3) {
+  top: 20%;
+  left: 85%;
+}
+
+.food-bg-item:nth-child(5n+4) {
+  top: 75%;
+  left: 5%;
+}
+
+.food-bg-item:nth-child(5n+5) {
+  top: 78%;
+  left: 78%;
+}
+
+.food-bg-item:nth-child(6) {
+  top: 40%;
+  left: 0%;
+}
+
+.food-bg-item:nth-child(7) {
+  top: 38%;
+  left: 88%;
+}
+
+.food-bg-item:nth-child(8) {
+  top: 60%;
+  left: 2%;
+}
+
+.food-bg-item:nth-child(9) {
+  top: 58%;
+  left: 82%;
+}
+
+.food-bg-item:nth-child(10) {
+  top: 88%;
+  left: 35%;
+}
+
+.food-bg-item:nth-child(11) {
+  top: 88%;
+  left: 58%;
+}
+
+.food-bg-item:nth-child(12) {
+  top: 2%;
+  left: 40%;
+}
+
+.food-bg-item:nth-child(13) {
+  top: 2%;
+  left: 58%;
+}
+
+.food-bg-item:nth-child(14) {
+  top: 90%;
+  left: 14%;
+}
+
+.food-bg-item:nth-child(15) {
+  top: 15%;
+  left: 18%;
+}
+
+@keyframes floatItem {
+
+  0%,
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  30% {
+    transform: translateY(-12px) rotate(4deg);
+  }
+
+  60% {
+    transform: translateY(8px) rotate(-3deg);
+  }
+}
+
+/* ── SPOTLIGHT ───────────────────────────────────────── */
+.food-spotlight {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* main featured image */
+.food-spotlight-img-wrap {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.food-spotlight-img-wrap.img-exit {
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.food-spotlight-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #fff;
+  box-shadow: 0 16px 64px rgba(34, 197, 94, 0.28), 0 4px 20px rgba(0, 0, 0, 0.12);
+  display: block;
+}
+
+/* decorative rings around the image */
+.food-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1.5px solid #22c55e33;
+  pointer-events: none;
+  animation: ringPulse 3.5s ease-in-out infinite;
+}
+
+.food-ring-1 {
+  inset: -14px;
+  animation-delay: 0s;
+}
+
+.food-ring-2 {
+  inset: -28px;
+  animation-delay: 0.6s;
+  border-color: #22c55e18;
+}
+
+@keyframes ringPulse {
+
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+
+  50% {
+    transform: scale(1.04);
+    opacity: 1;
+  }
+}
+
+/* ── BUBBLES ────────────────────────────────── */
+.food-bubble {
+  position: absolute;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  white-space: nowrap;
+  transition: opacity 0.35s ease, transform 0.35s ease;
+  z-index: 6;
+}
+
+.food-bubble.bubble-exit {
+  opacity: 0;
+  transform: translateY(6px) scale(0.95);
+}
+
+/* top bubble — name + tag */
+.food-bubble-top {
+  top: -54px;
+  left: 50%;
+  transform: translateX(-50%);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 160px;
+}
+
+.food-bubble-top.bubble-exit {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-6px) scale(0.95);
+}
+
+.food-bubble-name {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+.food-bubble-tag {
+  font-size: 0.65rem;
+  font-weight: 600;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  letter-spacing: 0.04em;
+}
+
+/* left bubble — calories */
+.food-bubble-left {
+  left: -145px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.food-bubble-left.bubble-exit {
+  opacity: 0;
+  transform: translateY(-50%) translateX(-8px) scale(0.95);
+}
+
+.bubble-icon {
+  font-size: 1.4rem;
+}
+
+.bubble-label {
+  font-size: 0.62rem;
+  color: #6b7280;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.bubble-value {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #111827;
+}
+
+/* right bubble — nutrition score */
+.food-bubble-right {
+  right: -155px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.food-bubble-right.bubble-exit {
+  opacity: 0;
+  transform: translateY(-50%) translateX(8px) scale(0.95);
+}
+
+/* ── THUMBNAIL PICKER ────────────────────────────────── */
+.food-thumbs {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.65rem;
+  z-index: 7;
+}
+
+.food-thumb {
+  all: unset;
+  position: relative;
+  cursor: pointer;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #e5e7eb;
+  transition: transform 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+}
+
+.food-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.food-thumb:hover {
+  transform: scale(1.1);
+  border-color: #22c55e88;
+}
+
+.food-thumb-active {
+  border-color: #22c55e;
+  box-shadow: 0 0 0 3px #22c55e33;
+  transform: scale(1.15);
+}
+
+.thumb-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid #22c55eaa;
+  animation: ringPulse 2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── SHARED KEYFRAMES ────────────────────────────────── */
+@keyframes fadeSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   RESPONSIVE
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 900px) {
+  .hero-inner {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .hero-left {
+    align-items: center;
+  }
+
+  .hero-subtext {
+    max-width: 100%;
+  }
+
+  .hero-right {
+    order: -1;
+    min-height: 420px;
+  }
+
+  .food-field {
+    height: 420px;
+  }
+
+  .food-spotlight-img-wrap {
+    width: 180px;
+    height: 180px;
+  }
+
+  .food-bubble-left {
+    left: -115px;
+  }
+
+  .food-bubble-right {
+    right: -120px;
+  }
+}
+
+@media (max-width: 600px) {
+  .hero-section {
+    padding: 4rem 1rem 2rem;
+  }
+
+  .food-bubble-left {
+    display: none;
+  }
+
+  .food-bubble-right {
+    display: none;
+  }
+
+  .food-bg-item {
+    width: 48px;
+    height: 48px;
+  }
+
+  .food-spotlight-img-wrap {
+    width: 156px;
+    height: 156px;
+  }
+}
