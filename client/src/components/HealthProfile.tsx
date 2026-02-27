@@ -82,8 +82,8 @@ const UnitToggle = ({ options, value, onChange }: any) => (
                 onClick={() => onChange(opt)}
                 type="button"
                 className={`text-[12px] min-w-[34px] px-2 h-[26px] flex items-center justify-center rounded-md font-bold transition-all ${value === opt
-                        ? 'bg-white text-[#0f172a] shadow-sm'
-                        : 'text-[#64748b] hover:text-[#0f172a]'
+                    ? 'bg-white text-[#0f172a] shadow-sm'
+                    : 'text-[#64748b] hover:text-[#0f172a]'
                     }`}
             >
                 {opt}
@@ -168,10 +168,69 @@ export function HealthProfile() {
         mealsPerDay: 3,
     })
 
+    const [saving, setSaving] = useState(false)
+    const [saveMessage, setSaveMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+    const [loadingProfile, setLoadingProfile] = useState(true)
+
     const update = (field: string, value: any) => {
         setProfile(prev => ({ ...prev, [field]: value }))
+        // Clear any save message when user makes changes
+        if (saveMessage) setSaveMessage(null)
     }
 
+    // ─── Load profile from DB on mount ───────────────────────────────────────
+    useEffect(() => {
+        const token = localStorage.getItem('token')
+        if (!token) {
+            navigate('/signin')
+            return
+        }
+
+        const loadProfile = async () => {
+            setLoadingProfile(true)
+            try {
+                const res = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                })
+                if (res.status === 401 || res.status === 403) {
+                    localStorage.removeItem('token')
+                    navigate('/signin')
+                    return
+                }
+                if (!res.ok) throw new Error('Failed to load profile')
+                const data = await res.json()
+                if (data.success && data.user) {
+                    const u = data.user
+                    setProfile(prev => ({
+                        ...prev,
+                        age: u.age || '',
+                        gender: u.gender || '',
+                        bloodGroup: u.bloodGroup || '',
+                        weight: u.weight || '',
+                        height: u.height || '',
+                        bmi: u.bmi ? u.bmi.toString() : null,
+                        conditions: u.medicalConditions || [],
+                        allergies: u.allergies || [],
+                        medicalNotes: u.medicalNotes || '',
+                        primaryGoal: u.primaryGoal || '',
+                        activityLevel: u.activityLevel || '',
+                        sleepHours: u.sleepHours || '',
+                        dietaryType: u.dietaryType || '',
+                        cuisines: u.cuisinePreferences || [],
+                        budget: u.budget || '',
+                        mealsPerDay: u.mealsPerDay || 3,
+                    }))
+                }
+            } catch (err) {
+                console.error('Error loading profile:', err)
+            } finally {
+                setLoadingProfile(false)
+            }
+        }
+        loadProfile()
+    }, [navigate])
+
+    // ─── Auto-calculate BMI ──────────────────────────────────────────────────
     useEffect(() => {
         if (profile.weight && profile.height) {
             let weightKg = profile.weightUnit === 'lbs'
@@ -199,26 +258,103 @@ export function HealthProfile() {
 
     const completion = getCompletion()
 
-    const handleSaveAndGenerate = () => {
-        localStorage.setItem('nutriai_profile', JSON.stringify(profile))
-        navigate('/meal-plan')
-    }
-
-    const handleSaveDraft = () => {
-        localStorage.setItem('nutriai_profile_draft', JSON.stringify(profile))
-        alert("Draft Saved Successfully!")
-    }
-
-    useEffect(() => {
-        const saved = localStorage.getItem('nutriai_profile') || localStorage.getItem('nutriai_profile_draft')
-        if (saved) {
-            try {
-                setProfile(JSON.parse(saved))
-            } catch (e) {
-                // ignore
-            }
+    // ─── Save profile to database ────────────────────────────────────────────
+    const saveProfileToDB = async () => {
+        const token = localStorage.getItem('token')
+        if (!token) {
+            navigate('/signin')
+            return
         }
-    }, [])
+
+        setSaving(true)
+        setSaveMessage(null)
+
+        // Convert units to metric (kg/cm) for storage
+        let weightKg = profile.weight
+            ? (profile.weightUnit === 'lbs'
+                ? parseFloat(profile.weight) * 0.453592
+                : parseFloat(profile.weight))
+            : undefined
+
+        let heightCm = profile.height
+            ? (profile.heightUnit === 'ft'
+                ? parseFloat(profile.height) * 30.48
+                : parseFloat(profile.height))
+            : undefined
+
+        const payload: Record<string, any> = {
+            age: profile.age ? parseInt(profile.age) : undefined,
+            gender: profile.gender || undefined,
+            bloodGroup: profile.bloodGroup || undefined,
+            weight: weightKg ? parseFloat(weightKg.toFixed(1)) : undefined,
+            height: heightCm ? parseFloat(heightCm.toFixed(1)) : undefined,
+            medicalConditions: profile.conditions,
+            allergies: profile.allergies,
+            medicalNotes: profile.medicalNotes || '',
+            primaryGoal: profile.primaryGoal || undefined,
+            activityLevel: profile.activityLevel || undefined,
+            sleepHours: profile.sleepHours ? parseFloat(profile.sleepHours) : undefined,
+            dietaryType: profile.dietaryType || undefined,
+            cuisinePreferences: profile.cuisines,
+            budget: profile.budget || undefined,
+            mealsPerDay: profile.mealsPerDay,
+        }
+
+        // Remove undefined fields
+        Object.keys(payload).forEach(key => {
+            if (payload[key] === undefined) delete payload[key]
+        })
+
+        try {
+            const res = await fetch('/api/auth/profile', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify(payload),
+            })
+
+            const data = await res.json()
+
+            if (data.success) {
+                setSaveMessage({ type: 'success', text: 'Profile saved successfully!' })
+            } else {
+                setSaveMessage({ type: 'error', text: data.message || 'Failed to save profile' })
+            }
+        } catch (err) {
+            console.error('Error saving profile:', err)
+            setSaveMessage({ type: 'error', text: 'Could not connect to server. Please try again.' })
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    const handleSaveAndGenerate = async () => {
+        await saveProfileToDB()
+        // Only navigate if save was successful (check after state update)
+        setTimeout(() => {
+            navigate('/meal-plan')
+        }, 500)
+    }
+
+    const handleSaveDraft = async () => {
+        await saveProfileToDB()
+    }
+
+    if (loadingProfile) {
+        return (
+            <div className="flex h-screen bg-[#f8fafc]">
+                <Sidebar />
+                <main className="flex-1 flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-3">
+                        <div className="w-10 h-10 border-4 border-[#22c55e] border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-[#64748b] text-sm font-medium">Loading your profile...</p>
+                    </div>
+                </main>
+            </div>
+        )
+    }
 
     return (
         <div className="flex h-screen bg-[#f8fafc]">
@@ -257,6 +393,19 @@ export function HealthProfile() {
                                 style={{ width: `${completion}%` }} />
                         </div>
                     </div>
+
+                    {/* Save Message Toast */}
+                    {saveMessage && (
+                        <div className={`mb-6 px-5 py-3 rounded-xl flex items-center gap-2 text-sm font-medium animate-in slide-in-from-top ${saveMessage.type === 'success'
+                                ? 'bg-[#dcfce7] text-[#16a34a] border border-[#bbf7d0]'
+                                : 'bg-[#fef2f2] text-[#dc2626] border border-[#fecaca]'
+                            }`}>
+                            <span className="material-symbols-outlined text-lg">
+                                {saveMessage.type === 'success' ? 'check_circle' : 'error'}
+                            </span>
+                            {saveMessage.text}
+                        </div>
+                    )}
 
                     {/* Content Grid: 2 Columns */}
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -351,7 +500,7 @@ export function HealthProfile() {
                                                     { value: 'sedentary', label: '🛋️ Sedentary' },
                                                     { value: 'light', label: '🚶 Light' },
                                                     { value: 'moderate', label: '🏃 Moderate' },
-                                                    { value: 'very_active', label: '💪 active' }
+                                                    { value: 'very_active', label: '💪 Active' }
                                                 ]}
                                             />
                                         </div>
@@ -459,15 +608,31 @@ export function HealthProfile() {
             <div className="fixed bottom-0 left-[256px] right-0 bg-white border-t border-[#e2e8f0] px-10 h-[72px] flex items-center justify-between z-50">
                 <div className="flex items-center gap-2.5 text-[#64748b]">
                     <Lock className="w-4 h-4" />
-                    <span className="font-medium text-[14px]">Your data is encrypted and stored locally.</span>
+                    <span className="font-medium text-[14px]">Your data is securely saved to the database.</span>
                 </div>
 
                 <div className="flex gap-4">
-                    <button onClick={handleSaveDraft} className="h-[44px] px-6 rounded-xl border-2 border-[#e2e8f0] text-[#475569] font-bold text-[14px] hover:border-[#cbd5e1] hover:bg-[#f8fafc] transition-all flex items-center gap-2">
-                        <FileText className="w-4 h-4" /> Save as Draft
+                    <button
+                        onClick={handleSaveDraft}
+                        disabled={saving}
+                        className="h-[44px] px-6 rounded-xl border-2 border-[#e2e8f0] text-[#475569] font-bold text-[14px] hover:border-[#cbd5e1] hover:bg-[#f8fafc] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {saving ? (
+                            <div className="w-4 h-4 border-2 border-[#475569] border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                            <FileText className="w-4 h-4" />
+                        )}
+                        Save Profile
                     </button>
-                    <button onClick={handleSaveAndGenerate} className="h-[44px] px-8 rounded-xl bg-[#22c55e] text-white font-bold text-[14px] hover:bg-[#16a34a] hover:-translate-y-[1px] shadow-[0_4px_12px_rgba(34,197,94,0.25)] hover:shadow-[0_6px_16px_rgba(34,197,94,0.3)] transition-all flex items-center gap-2">
-                        Generate Your Plan <span className="text-[18px] leading-none mb-[2px]">&rarr;</span>
+                    <button
+                        onClick={handleSaveAndGenerate}
+                        disabled={saving}
+                        className="h-[44px] px-8 rounded-xl bg-[#22c55e] text-white font-bold text-[14px] hover:bg-[#16a34a] hover:-translate-y-[1px] shadow-[0_4px_12px_rgba(34,197,94,0.25)] hover:shadow-[0_6px_16px_rgba(34,197,94,0.3)] transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        {saving ? (
+                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                        ) : null}
+                        Save & Generate Plan <span className="text-[18px] leading-none mb-[2px]">&rarr;</span>
                     </button>
                 </div>
             </div>
@@ -476,4 +641,3 @@ export function HealthProfile() {
 }
 
 export default HealthProfile
-

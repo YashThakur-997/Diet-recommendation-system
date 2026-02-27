@@ -14,12 +14,29 @@ export function SignIn() {
             setError('Please fill in all fields')
             return
         }
-        localStorage.setItem('nutriai_user', JSON.stringify({
-            email,
-            name: email.split('@')[0],
-            loggedIn: true
-        }))
-        navigate('/dashboard')
+        fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        })
+            .then(res => {
+                if (!res.ok && res.headers.get('content-type')?.includes('application/json') === false) {
+                    throw new Error(`Server error: ${res.status}`);
+                }
+                return res.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    localStorage.setItem('token', data.token);
+                    navigate('/dashboard');
+                } else {
+                    setError(data.message || 'Login failed. Please try again.');
+                }
+            })
+            .catch(err => {
+                console.error('Login error:', err);
+                setError('Unable to connect to the server. Please try again later.');
+            });
     }
 
     const handleGoogleLogin = () => {
