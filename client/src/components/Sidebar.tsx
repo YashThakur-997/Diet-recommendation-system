@@ -1,7 +1,63 @@
-import { Link, useLocation } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export function Sidebar() {
     const location = useLocation()
+    const navigate = useNavigate()
+    const menuRef = useRef<HTMLDivElement>(null)
+
+    const [user, setUser] = useState<{ username: string; email: string } | null>(null)
+    const [menuOpen, setMenuOpen] = useState(false)
+
+    // Fetch user info on mount
+    useEffect(() => {
+        const token = localStorage.getItem('token')
+        if (!token) return
+
+        fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success && data.user) {
+                    setUser({ username: data.user.username, email: data.user.email })
+                }
+            })
+            .catch(() => { /* silent fail — sidebar still works */ })
+    }, [])
+
+    // Close menu on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+                setMenuOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    const handleLogout = async () => {
+        const token = localStorage.getItem('token')
+        try {
+            await fetch('/api/auth/logout', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+            })
+        } catch {
+            // logout even if server call fails
+        }
+        localStorage.removeItem('token')
+        navigate('/signin')
+    }
+
+    // Get initials for avatar fallback
+    const initials = user?.username
+        ? user.username.slice(0, 2).toUpperCase()
+        : '?'
 
     const navItems = [
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
@@ -45,21 +101,62 @@ export function Sidebar() {
             </nav>
 
             {/* User Profile Bottom */}
-            <div className="p-4 border-t border-slate-200">
-                <Link to="/signin" className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition-colors text-[#374151]">
-                    <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden relative border border-slate-200">
-                        <img
-                            alt="User Avatar"
-                            className="w-full h-full object-cover"
-                            src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2Foj2ALR7y132-1P1wzMkY2FYcGsO58kHJc2l9S-pO01IfH8TH6WjRMydBVWaBeaErGfMC7VkfSMQ0qOoFaZZeDp91fIDI4ZaSxx2dV89vIxlpYdV49LzEwI4-anVQfoV5VJIcneNdFk5W9vnN1CzqYDfJuJ8tG56y6bTwoAQUT0bnBsAosOgkpK7EV1LEqj6AlvabsFYKFawvhOgQsp86wFzXdSLYdC7CedLX6fMXWAnTU6-StfDs4aqXi2_y9TZpaBf-TyuPJ9I"
-                        />
+            <div className="p-4 border-t border-slate-200 relative" ref={menuRef}>
+                <button
+                    onClick={() => setMenuOpen(!menuOpen)}
+                    className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition-colors text-[#374151]"
+                >
+                    {/* Avatar with initials */}
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#22c55e] to-[#16a34a] flex items-center justify-center text-white font-bold text-sm shrink-0 shadow-sm">
+                        {initials}
                     </div>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-[#0f172a] truncate">Rahul S.</p>
-                        <p className="text-xs text-[#64748b] truncate">Pro Member</p>
+                    <div className="flex-1 min-w-0 text-left">
+                        <p className="text-sm font-semibold text-[#0f172a] truncate">
+                            {user?.username || 'Loading...'}
+                        </p>
+                        <p className="text-xs text-[#64748b] truncate">
+                            {user?.email || ''}
+                        </p>
                     </div>
-                    <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '20px' }}>more_vert</span>
-                </Link>
+                    <span className={`material-symbols-outlined text-slate-400 transition-transform duration-200 ${menuOpen ? 'rotate-180' : ''}`} style={{ fontSize: '20px' }}>
+                        expand_more
+                    </span>
+                </button>
+
+                {/* Dropdown Menu */}
+                {menuOpen && (
+                    <div className="absolute bottom-full left-4 right-4 mb-2 bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden z-50 animate-in slide-in-from-bottom-2">
+                        <div className="p-3 border-b border-slate-100">
+                            <p className="text-xs font-bold text-[#0f172a] truncate">{user?.username}</p>
+                            <p className="text-[11px] text-[#64748b] truncate">{user?.email}</p>
+                        </div>
+                        <div className="py-1">
+                            <button
+                                onClick={() => { setMenuOpen(false); navigate('/health-profile') }}
+                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f8fafc] transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[#64748b]" style={{ fontSize: '18px' }}>settings</span>
+                                Edit Profile
+                            </button>
+                            <button
+                                onClick={() => { setMenuOpen(false); navigate('/dashboard') }}
+                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:bg-[#f8fafc] transition-colors"
+                            >
+                                <span className="material-symbols-outlined text-[#64748b]" style={{ fontSize: '18px' }}>dashboard</span>
+                                Dashboard
+                            </button>
+                        </div>
+                        <div className="border-t border-slate-100 py-1">
+                            <button
+                                onClick={handleLogout}
+                                className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                                <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>logout</span>
+                                Sign Out
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
         </aside>
     )
