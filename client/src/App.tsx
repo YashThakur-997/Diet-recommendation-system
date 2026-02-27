@@ -4,6 +4,8 @@ import { HeroSection } from './components/HeroSection'
 import { Dashboard } from './components/Dashboard'
 import { MealPlan } from './components/MealPlan'
 import { HealthProfile } from './components/HealthProfile'
+import { SignIn } from './pages/SignIn'
+import { SignUp } from './pages/SignUp'
 import './App.css'
 
 function AnimatedRoutes() {
@@ -13,6 +15,8 @@ function AnimatedRoutes() {
     <AnimatePresence mode="wait">
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<HeroSection />} />
+        <Route path="/signin" element={<SignIn />} />
+        <Route path="/signup" element={<SignUp />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/meal-plan" element={<MealPlan />} />
         <Route path="/health-profile" element={<HealthProfile />} />

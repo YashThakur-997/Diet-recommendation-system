@@ -46,7 +46,7 @@ export function Sidebar() {
 
             {/* User Profile Bottom */}
             <div className="p-4 border-t border-slate-200">
-                <div className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition-colors text-[#374151]">
+                <Link to="/signin" className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition-colors text-[#374151]">
                     <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden relative border border-slate-200">
                         <img
                             alt="User Avatar"
@@ -59,7 +59,7 @@ export function Sidebar() {
                         <p className="text-xs text-[#64748b] truncate">Pro Member</p>
                     </div>
                     <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '20px' }}>more_vert</span>
-                </div>
+                </Link>
             </div>
         </aside>
     )

@@ -115,7 +115,7 @@ export function HeroSection() {
           <span className="font-bold text-xl text-slate-800 tracking-tight">NutriAI</span>
         </div>
         <div className="flex items-center gap-4">
-          <button className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</button>
+          <button onClick={() => navigate('/signin')} className="text-sm font-semibold text-slate-600 hover:text-slate-900 transition-colors">Sign In</button>
           <button onClick={() => navigate('/dashboard')} className="text-sm font-bold bg-green-500 text-white px-5 py-2.5 rounded-full hover:bg-green-600 transition-all shadow-sm">
             Get Started
           </button>
