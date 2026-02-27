@@ -3,7 +3,7 @@
  * Handles meal-plan generation requests (both streaming and non-streaming).
  */
 const ollama = require("../services/ollama");
-const mealPlan = require("../services/mealPlan");
+const mealPlan = require("../services/mealplan");
 const profile = require("../services/profile");
 
 const DEFAULT_MODEL = process.env.DEFAULT_MODEL || "adrienbrault/biomistral-7b:Q5_K_M";
