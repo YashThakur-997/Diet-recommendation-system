@@ -6,7 +6,7 @@ export function Sidebar() {
     const navItems = [
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
         { label: 'My Meal Plan', icon: 'restaurant_menu', path: '/meal-plan' },
-        { label: 'Health Profile', icon: 'person', path: '/dashboard' },
+        { label: 'Health Profile', icon: 'person', path: '/health-profile' },
     ]
 
     return (

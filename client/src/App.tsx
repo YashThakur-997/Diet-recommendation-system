@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion'
 import { HeroSection } from './components/HeroSection'
 import { Dashboard } from './components/Dashboard'
 import { MealPlan } from './components/MealPlan'
+import { HealthProfile } from './components/HealthProfile'
 import './App.css'
 
 function AnimatedRoutes() {
@@ -14,6 +15,7 @@ function AnimatedRoutes() {
         <Route path="/" element={<HeroSection />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/meal-plan" element={<MealPlan />} />
+        <Route path="/health-profile" element={<HealthProfile />} />
       </Routes>
     </AnimatePresence>
   )
