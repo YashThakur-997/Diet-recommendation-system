@@ -17,14 +17,22 @@ function mealPlanPrompt(profileStr) {
 
   return (
     `You are a dietitian and chef. ${profileStr}\n\n` +
-    `Create a 1-day meal plan strictly containing exactly ${mealsCount} meals.\n` +
-    `Use EXACTLY these meal names: ${mealNames}.\n\n` +
-    "For each meal include exactly these headings:\n" +
+    `Create a 7-day meal plan strictly containing exactly ${mealsCount} meals PER DAY.\n` +
+    `Use EXACTLY these meal names each day: ${mealNames}.\n\n` +
+    "CRITICAL FORMAT RULES:\n" +
+    "- Start each day with: # Day X: [Weekday]\n" +
+    "  Example: # Day 1: Monday\n" +
+    "- Under each day, list each meal as: ## [Meal]: [Dish Name]\n" +
+    "  Example: ## Breakfast: Oats with Banana\n" +
+    "- For each meal include exactly these sub-headings:\n" +
     "  ### Ingredients\n" +
     "  ### Cooking Steps\n" +
     "  ### Nutrition\n\n" +
-    "End with a Daily Macro Summary table.\n" +
-    "Heading format: ## [Meal]: [Dish Name]"
+    "- After ALL 7 days, end with:\n" +
+    "# Weekly Summary\n" +
+    "A table with columns: Day | Total Cal | Protein | Carbs | Fat\n\n" +
+    "- Vary the dishes across days. Do NOT repeat the same dish two days in a row.\n" +
+    "- Keep format consistent for every day."
   );
 }
 
