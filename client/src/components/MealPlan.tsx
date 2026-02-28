@@ -81,17 +81,21 @@ function parseMealPlan(raw: string): DayPlan {
     for (const section of sections) {
         if (!section.trim()) continue
 
+        // Check only the first line for the meal type heading
+        const firstLine = section.trim().split('\n')[0]
+
         for (const mealType of mealTypes) {
-            const regex = new RegExp(`(?:^##\\s*)?(?:\\*\\*)?${mealType}(?:\\s*:)?(?:\\*\\*)?\\s*[:\\-–]?\\s*(.*)`, 'im')
-            const match = section.match(regex)
+            // Check matching starting with optional ## or **
+            const regex = new RegExp(`^(?:##\\s*)?(?:\\*\\*)?${mealType}(?:\\s*:)?(?:\\*\\*)?\\s*[:\\-–]?\\s*(.*)`, 'i')
+            const match = firstLine.match(regex)
             if (match) {
                 let name = match[1]?.trim() || 'Meal'
                 // Clean up markdown from name
-                name = name.replace(/[*#]/g, '').trim()
+                name = name.replace(/[*#|]/g, '').trim()
                 if (name.length > 60) name = name.substring(0, 57) + '...'
                 if (!name) name = mealType
 
-                // Extract calories from the section
+                // Extract calories from the *whole section text*
                 const calMatch = section.match(/(\d{2,4})\s*(?:kcal|calories|cal)/i)
                 const calories = calMatch ? `${calMatch[1]} kcal` : ''
 
@@ -710,6 +714,30 @@ export function MealPlan() {
             if (fullMealPlan) {
                 const parsed = parseMealPlan(fullMealPlan)
                 setPlan(parsed)
+
+                const saveToHistory = (newPlan: any) => {
+                    try {
+                        const existing = localStorage.getItem('nutriai_meal_history')
+                        const history = existing ? JSON.parse(existing) : []
+
+                        const newEntry = {
+                            id: Date.now(),
+                            date: new Date().toLocaleDateString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                            }),
+                            weekLabel: `Week of ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`,
+                            plan: newPlan,
+                            totalDays: newPlan?.days?.length || 7
+                        }
+
+                        const updated = [newEntry, ...history].slice(0, 5)
+                        localStorage.setItem('nutriai_meal_history', JSON.stringify(updated))
+                    } catch (e) { console.error(e) }
+                }
+                saveToHistory(parsed)
+
                 setChatMessages(prev => [...prev, {
                     role: 'ai',
                     text: `✅ Your meal plan is ready! I've created a ${parsed.meals.length}-meal plan${parsed.totalCalories ? ` totalling ~${parsed.totalCalories}` : ''} based on your health profile.`,
