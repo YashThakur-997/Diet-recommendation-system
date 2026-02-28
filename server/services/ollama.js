@@ -10,16 +10,16 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 const TAGS_URL = `${OLLAMA_HOST}/api/tags`;
 const GEN_URL = `${OLLAMA_HOST}/api/generate`;
 
-// Tuned for llama3.1
+// Tuned for llama3.1 — 7-day meal plans need large output space
 const DEFAULT_OPTIONS = {
   temperature: 0.7,
   top_p: 0.9,
-  num_predict: 1024,
-  num_ctx: 4096,
+  num_predict: 8192,
+  num_ctx: 16384,
   repeat_penalty: 1.1,
 };
 
-const REQUEST_TIMEOUT_MS = 300_000; // 5 minutes — large models need time
+const REQUEST_TIMEOUT_MS = 600_000; // 10 minutes — 7-day plans take longer
 
 // ─── List installed models ────────────────────────────────────────────────────
 async function listModels() {

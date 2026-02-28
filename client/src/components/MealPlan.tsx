@@ -13,10 +13,17 @@ type Meal = {
 
 type DayPlan = {
     dayName: string
+    dayNumber: number
     date: string
     totalCalories: string
     meals: Meal[]
-    raw: string        // raw markdown from LLM
+    raw: string
+}
+
+type WeekPlan = {
+    days: DayPlan[]
+    weeklySummary: string
+    raw: string
 }
 
 type ChatMessage = {
@@ -33,12 +40,14 @@ export interface ShoppingItem {
 export interface ShoppingCategory {
     name: string;
     emoji: string;
+    color?: string;
     items: ShoppingItem[];
 }
 
 export interface ShoppingList {
     totalItems: number;
     estimatedCost: string;
+    note?: string;
     categories: ShoppingCategory[];
 }
 
@@ -59,78 +68,132 @@ function getWeekRange(): string {
     return `Week of ${fmt(monday)} – ${fmt(sunday)}, ${now.getFullYear()}`
 }
 
-function getTodayName(): string {
-    return new Date().toLocaleDateString('en-US', { weekday: 'long' })
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+
+function getDayDate(dayOffset: number): string {
+    const now = new Date()
+    const dayOfWeek = now.getDay()
+    const monday = new Date(now)
+    monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7))
+    const target = new Date(monday)
+    target.setDate(monday.getDate() + dayOffset)
+    return target.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-function getTodayDate(): string {
-    return new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+function getTodayDayIndex(): number {
+    const day = new Date().getDay()
+    return day === 0 ? 6 : day - 1
 }
 
 /**
- * Parse the raw LLM markdown response into structured meals.
- * Handles formats like: ## Breakfast: Dish Name or **Breakfast:** Dish Name
+ * Parse a 7-day LLM markdown response into structured WeekPlan.
+ * Splits by "# Day X" headings, then parses meals within each day.
  */
-function parseMealPlan(raw: string): DayPlan {
-    const meals: Meal[] = []
-    const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Snack 1', 'Snack 2', 'Morning Snack', 'Evening Snack']
+function parseWeekPlan(raw: string): WeekPlan {
+    const mealTypes = ['Breakfast', 'Lunch', 'Dinner', 'Snack', 'Snack 1', 'Snack 2', 'Morning Snack', 'Evening Snack', 'Afternoon Snack']
 
-    // Try to split by ## headings first
-    const sections = raw.split(/(?=^##\s)/m)
+    // Extract weekly summary
+    let weeklySummary = ''
+    const summaryMatch = raw.match(/^#\s+Weekly\s+Summary[\s\S]*/im)
+    if (summaryMatch) {
+        weeklySummary = summaryMatch[0].trim()
+    }
 
-    for (const section of sections) {
-        if (!section.trim()) continue
+    // Split by day headings: # Day 1: Monday, etc.
+    const dayRegex = /^#\s+Day\s+(\d+)\s*[:\-–]?\s*(.*)/im
+    const daySections = raw.split(/(?=^#\s+Day\s+\d)/im).filter(s => s.trim())
 
-        // Check only the first line for the meal type heading
-        const firstLine = section.trim().split('\n')[0]
+    const days: DayPlan[] = []
 
-        for (const mealType of mealTypes) {
-            // Check matching starting with optional ## or **
-            const regex = new RegExp(`^(?:##\\s*)?(?:\\*\\*)?${mealType}(?:\\s*:)?(?:\\*\\*)?\\s*[:\\-–]?\\s*(.*)`, 'i')
-            const match = firstLine.match(regex)
-            if (match) {
-                let name = match[1]?.trim() || 'Meal'
-                // Clean up markdown from name
-                name = name.replace(/[*#|]/g, '').trim()
-                if (name.length > 60) name = name.substring(0, 57) + '...'
-                if (!name) name = mealType
+    for (const section of daySections) {
+        const headerMatch = section.match(dayRegex)
+        if (!headerMatch) continue
 
-                // Extract calories from the *whole section text*
-                const calMatch = section.match(/(\d{2,4})\s*(?:kcal|calories|cal)/i)
-                const calories = calMatch ? `${calMatch[1]} kcal` : ''
+        const dayNum = parseInt(headerMatch[1], 10)
+        let dayLabel = headerMatch[2]?.trim().replace(/[*#]/g, '').trim() || ''
+        if (!dayLabel || dayLabel.length < 2) {
+            dayLabel = WEEKDAYS[(dayNum - 1) % 7] || `Day ${dayNum}`
+        }
 
-                meals.push({
-                    type: mealType.replace(/\d+/, '').trim(),
-                    name,
-                    calories,
-                    details: section.trim(),
-                })
-                break
+        const meals: Meal[] = []
+        const mealSections = section.split(/(?=^##\s)/m)
+
+        for (const mealSection of mealSections) {
+            if (!mealSection.trim()) continue
+            const firstLine = mealSection.trim().split('\n')[0]
+
+            for (const mealType of mealTypes) {
+                const regex = new RegExp(`^(?:##\\s*)?(?:\\*\\*)?${mealType}(?:\\s*:)?(?:\\*\\*)?\\s*[:\\-–]?\\s*(.*)`, 'i')
+                const match = firstLine.match(regex)
+                if (match) {
+                    let name = match[1]?.trim() || 'Meal'
+                    name = name.replace(/[*#|]/g, '').trim()
+                    if (name.length > 60) name = name.substring(0, 57) + '...'
+                    if (!name) name = mealType
+
+                    const calMatch = mealSection.match(/(\d{2,4})\s*(?:kcal|calories|cal)/i)
+                    const calories = calMatch ? `${calMatch[1]} kcal` : ''
+
+                    meals.push({
+                        type: mealType.replace(/\d+/, '').trim(),
+                        name,
+                        calories,
+                        details: mealSection.trim(),
+                    })
+                    break
+                }
             }
+        }
+
+        const totalCalMatch = section.match(/(?:total|daily|sum)[^:]*:\s*~?(\d{3,5})\s*(?:kcal|calories|cal)/i)
+        const totalCalories = totalCalMatch ? `${totalCalMatch[1]} kcal` : ''
+
+        if (meals.length > 0) {
+            days.push({
+                dayName: dayLabel,
+                dayNumber: dayNum,
+                date: getDayDate(dayNum - 1),
+                totalCalories,
+                meals,
+                raw: section.trim(),
+            })
         }
     }
 
-    // If no structured meals found, create a single entry
-    if (meals.length === 0 && raw.trim()) {
-        meals.push({
-            type: 'Meal Plan',
-            name: 'Generated Plan',
-            calories: '',
-            details: raw.trim(),
+    // FALLBACK: If we couldn't parse any days, treat entire raw as Day 1
+    if (days.length === 0 && raw.trim()) {
+        const fallbackMeals: Meal[] = []
+        const sections = raw.split(/(?=^##\s)/m)
+        for (const section of sections) {
+            if (!section.trim()) continue
+            const firstLine = section.trim().split('\n')[0]
+            for (const mealType of mealTypes) {
+                const regex = new RegExp(`^(?:##\\s*)?(?:\\*\\*)?${mealType}(?:\\s*:)?(?:\\*\\*)?\\s*[:\\-–]?\\s*(.*)`, 'i')
+                const match = firstLine.match(regex)
+                if (match) {
+                    let name = match[1]?.trim() || 'Meal'
+                    name = name.replace(/[*#|]/g, '').trim()
+                    if (name.length > 60) name = name.substring(0, 57) + '...'
+                    if (!name) name = mealType
+                    const calMatch = section.match(/(\d{2,4})\s*(?:kcal|calories|cal)/i)
+                    const calories = calMatch ? `${calMatch[1]} kcal` : ''
+                    fallbackMeals.push({ type: mealType.replace(/\d+/, '').trim(), name, calories, details: section.trim() })
+                    break
+                }
+            }
+        }
+        const now = new Date()
+        days.push({
+            dayName: now.toLocaleDateString('en-US', { weekday: 'long' }),
+            dayNumber: 1,
+            date: now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            totalCalories: '',
+            meals: fallbackMeals.length > 0 ? fallbackMeals : [{ type: 'Meal Plan', name: 'Generated Plan', calories: '', details: raw.trim() }],
+            raw: raw.trim(),
         })
     }
 
-    // Try to extract total calories
-    const totalCalMatch = raw.match(/(?:total|daily|sum)[^:]*:\s*~?(\d{3,5})\s*(?:kcal|calories|cal)/i)
-    const totalCalories = totalCalMatch ? `${totalCalMatch[1]} kcal` : ''
-
-    return {
-        dayName: getTodayName(),
-        date: getTodayDate(),
-        totalCalories,
-        meals,
-        raw,
-    }
+    return { days, weeklySummary, raw }
 }
 
 const mealIcons: Record<string, { bg: string; color: string; icon: string }> = {
@@ -487,12 +550,26 @@ export function MealPlan() {
     const chatEndRef = useRef<HTMLDivElement>(null)
 
     // State
-    const [plan, setPlan] = useState<DayPlan | null>(() => {
+    const [plan, setPlan] = useState<WeekPlan | null>(() => {
         try {
             const saved = localStorage.getItem('nutriai_meal_plan')
-            return saved ? JSON.parse(saved) : null
+            if (!saved) return null
+            const parsed = JSON.parse(saved)
+            // New WeekPlan format — has .days array
+            if (parsed.days && Array.isArray(parsed.days)) return parsed
+            // Old DayPlan format — has .meals array, wrap into a single-day WeekPlan
+            if (parsed.meals && Array.isArray(parsed.meals)) {
+                return {
+                    days: [{ ...parsed, dayNumber: 1 }],
+                    weeklySummary: '',
+                    raw: parsed.raw || '',
+                } as WeekPlan
+            }
+            // Unknown shape — discard
+            return null
         } catch { return null }
     })
+    const [selectedDay, setSelectedDay] = useState<number>(() => getTodayDayIndex())
     const [shoppingList, setShoppingList] = useState<ShoppingList | null>(() => {
         try {
             const saved = localStorage.getItem('nutriai_shopping_list')
@@ -525,6 +602,76 @@ export function MealPlan() {
     const recognitionRef = useRef<any>(null)
     const [highlightSection, setHighlightSection] = useState<'meals' | 'shopping' | null>(null)
     const [checkedItems, setCheckedItems] = useState<string[]>([])
+    const [activeCategory, setActiveCategory] = useState('all')
+
+    // "Why this meal?" explanation feature
+    const [mealExplanations, setMealExplanations] = useState<Record<string, string>>({})
+    const [loadingExplanation, setLoadingExplanation] = useState<string | null>(null)
+    const [activeExplanation, setActiveExplanation] = useState<string | null>(null)
+
+    const fetchMealExplanation = async (mealName: string, mealType: string, dayName: string) => {
+        const key = `${dayName}-${mealType}`
+
+        // Toggle if already loaded
+        if (mealExplanations[key]) {
+            setActiveExplanation(activeExplanation === key ? null : key)
+            return
+        }
+
+        setLoadingExplanation(key)
+        setActiveExplanation(key)
+
+        // Read user profile from localStorage
+        let profileData: Record<string, string | string[]> = {}
+        try {
+            const token = localStorage.getItem('token')
+            if (token) {
+                const profileRes = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                })
+                const data = await profileRes.json()
+                if (data.success) profileData = data.user
+            }
+        } catch { /* ignore */ }
+
+        const prompt = `You are NutriAI explaining a meal choice.
+Be friendly, specific, and under 60 words.
+
+MEAL: ${mealName} (${mealType} on ${dayName})
+
+USER PROFILE:
+- Age: ${profileData.age || 'unknown'}, Gender: ${profileData.gender || 'unknown'}
+- Conditions: ${Array.isArray(profileData.conditions) ? profileData.conditions.join(', ') : 'None'}
+- Allergies: ${Array.isArray(profileData.allergies) ? profileData.allergies.join(', ') : 'None'}
+- Goal: ${profileData.primaryGoal || 'general health'}
+- Activity: ${profileData.activityLevel || 'moderate'}
+- Diet: ${profileData.dietaryType || 'balanced'}
+
+Explain in 2-3 sentences WHY this specific meal was chosen for this person. Mention their specific health condition or goal.
+Be direct. Start with the meal name.
+No JSON. Plain text only.`
+
+        try {
+            const res = await fetch('/ollama_api/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    model: 'llama3.1:latest',
+                    prompt,
+                    stream: false,
+                    options: { num_predict: 256, temperature: 0.7 }
+                })
+            })
+            const data = await res.json()
+            const explanation = data.response?.trim() || 'Unable to generate explanation.'
+
+            setMealExplanations(prev => ({ ...prev, [key]: explanation }))
+        } catch {
+            setMealExplanations(prev => ({ ...prev, [key]: 'Unable to load explanation right now.' }))
+        } finally {
+            setLoadingExplanation(null)
+        }
+    }
 
     const toggleItem = (key: string) => {
         setCheckedItems(prev =>
@@ -717,8 +864,9 @@ export function MealPlan() {
 
             // 5. Parse the full response into structured data
             if (fullMealPlan) {
-                const parsed = parseMealPlan(fullMealPlan)
+                const parsed = parseWeekPlan(fullMealPlan)
                 setPlan(parsed)
+                setSelectedDay(getTodayDayIndex())
 
                 const saveToHistory = (newPlan: any) => {
                     try {
@@ -745,7 +893,7 @@ export function MealPlan() {
 
                 setChatMessages(prev => [...prev, {
                     role: 'ai',
-                    text: `✅ Your meal plan is ready! I've created a ${parsed.meals.length}-meal plan${parsed.totalCalories ? ` totalling ~${parsed.totalCalories}` : ''} based on your health profile.`,
+                    text: `\u2705 Your meal plan is ready! I've created a ${parsed.days.length}-day plan with ${parsed.days[0]?.meals.length || 0} meals per day based on your health profile.`,
                     time: getFormattedTime(),
                 }])
                 // Auto-generate shopping list after meal plan is ready
@@ -780,17 +928,11 @@ export function MealPlan() {
                 return planData.meals.map((m: Meal) => `${m.type}: ${m.name}`).join(', ')
             }
 
-            // If mealPlan is an object with days array
+            // If it's our WeekPlan type with days array of DayPlan
             if (planData.days && Array.isArray(planData.days)) {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                return planData.days.map((day: any) => {
-                    const meals = [
-                        day.breakfast && `Breakfast: ${day.breakfast}`,
-                        day.lunch && `Lunch: ${day.lunch}`,
-                        day.dinner && `Dinner: ${day.dinner}`,
-                        day.snack && `Snack: ${day.snack}`,
-                    ].filter(Boolean).join(', ')
-                    return `${day.day}: ${meals}`
+                return planData.days.map((day: DayPlan) => {
+                    const meals = day.meals.map((m: Meal) => `${m.type}: ${m.name}`).join(', ')
+                    return `${day.dayName}: ${meals}`
                 }).join('\n')
             }
 
@@ -863,54 +1005,67 @@ export function MealPlan() {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cleanShoppingList = (data: any) => {
+    const cleanShoppingList = (data: any): ShoppingList => {
         if (!data?.categories) return data
 
-        const cleaned = {
+        const CATEGORY_WORDS = [
+            'proteins', 'vegetables', 'fruits',
+            'grains', 'legumes', 'dairy', 'eggs',
+            'condiments', 'spices', 'oils', 'nuts',
+            'beverages', 'ingredients', 'items', 'pantry',
+            'meat', 'seafood', 'poultry'
+        ]
+
+        const cleaned: ShoppingList = {
             ...data,
-            categories: data.categories.map((cat: ShoppingCategory) => ({
-                ...cat,
-                // Remove ** markdown from category names
-                name: cat.name
-                    .replace(/\*+/g, '')
-                    .trim(),
-                items: cat.items
-                    // Remove non-ingredient items
-                    .filter((item: ShoppingItem) => {
-                        const name = item.name?.toLowerCase() || ''
-                        return (
-                            // Skip prose sentences
-                            name.split(' ').length < 8 &&
-                            // Skip "here is your..." type text
-                            !name.includes('here is') &&
-                            !name.includes('shopping list') &&
-                            !name.includes('pantry') &&
-                            !name.includes('you may') &&
-                            !name.includes('assuming') &&
-                            !name.includes('note:') &&
-                            name.length > 1
-                        )
-                    })
-                    .map((item: ShoppingItem) => ({
-                        ...item,
-                        // Clean ** from item names
-                        name: item.name
-                            .replace(/\*+/g, '')
-                            .replace(/^\d+\.\s*/, '') // remove "1. "
-                            .replace(/^[-•]\s*/, '')  // remove "- "
-                            .trim(),
-                        // Fix quantity parsing issues like "8)"
-                        quantity: item.quantity
-                            ?.replace(/^\(/, '')   // remove leading (
-                            ?.replace(/\)$/, '')   // remove trailing )
-                            ?.replace(/\*+/g, '')  // remove **
-                            ?.trim() || 'as needed'
-                    }))
-                    // Remove items with empty names
-                    .filter((item: ShoppingItem) => item.name.length > 0)
-            }))
-                // Remove empty categories
-                .filter((cat: ShoppingCategory) => cat.items.length > 0)
+            note: (data.note || '').replace(/\*+/g, '').trim(),
+            categories: data.categories
+                .map((cat: ShoppingCategory) => ({
+                    ...cat,
+                    name: cat.name?.replace(/\*+/g, '').trim(),
+                    items: (cat.items || [])
+                        .filter((item: ShoppingItem) => {
+                            if (!item?.name) return false
+                            const name = item.name.toLowerCase().replace(/\*+/g, '').trim()
+
+                            // Filter out category headers appearing as items
+                            const isCategoryWord = CATEGORY_WORDS.some(w =>
+                                name === w || name === w + 's' ||
+                                name.startsWith(w + ' &') || name.startsWith(w + 's &')
+                            )
+
+                            // Filter out note/prose sentences
+                            const isNote =
+                                name.startsWith('note') ||
+                                name.startsWith('since') ||
+                                name.startsWith('please') ||
+                                name.startsWith('you ') ||
+                                name.startsWith('this ') ||
+                                name.startsWith('here is') ||
+                                name.includes('shopping list') ||
+                                name.includes('lactose') ||
+                                name.includes('intolerant') ||
+                                name.includes('assuming') ||
+                                name.includes('you may') ||
+                                name.split(' ').length > 6
+
+                            return !isCategoryWord && !isNote && name.length > 1
+                        })
+                        .map((item: ShoppingItem) => ({
+                            name: item.name
+                                .replace(/\*+/g, '')
+                                .replace(/^\d+\.\s*/, '')
+                                .replace(/^[-•]\s*/, '')
+                                .trim(),
+                            quantity: (item.quantity || '')
+                                .replace(/\*+/g, '')
+                                .replace(/^\(|\)$/g, '')
+                                .trim() || 'as needed'
+                        }))
+                        .filter((item: ShoppingItem) => item.name.length > 1)
+                }))
+                .filter((cat: ShoppingCategory) => cat.items.length > 0),
+            totalItems: 0,
         }
 
         // Recalculate total items
@@ -933,40 +1088,54 @@ export function MealPlan() {
         // Convert meal plan to readable text
         const planText = mealPlanToText(plan)
 
-        // ── CRITICAL: This prompt structure forces
-        //    Ollama to return ONLY valid JSON ──
+        // Load user profile for dietary context
+        let userProfile = {}
+        try {
+            const token = localStorage.getItem('token')
+            if (token) {
+                const profileRes = await fetch('/api/auth/me', {
+                    headers: { 'Authorization': `Bearer ${token}` },
+                })
+                const profileData = await profileRes.json()
+                if (profileData.success) userProfile = profileData.user
+            }
+        } catch { /* ignore */ }
+
         const prompt = `
-You are a grocery list generator.
-Extract ALL ingredients from this meal plan.
+You are a grocery list generator for Indian cooking.
+Extract ingredients from this meal plan.
 
 MEAL PLAN:
 ${planText}
 
-OUTPUT RULES — FOLLOW EXACTLY:
-- Return ONLY raw JSON, nothing else
-- No markdown, no asterisks, no backticks  
-- No intro text like "Here is your list"
-- No notes or explanations after the JSON
-- No pantry staple notes
-- Combine duplicate ingredients
-- Use realistic quantities (not "as needed")
+USER HEALTH PROFILE:
+${JSON.stringify(userProfile)}
 
-Return this EXACT JSON structure, 
-filling all 6 categories:
+STRICT OUTPUT RULES:
+1. Return ONLY raw JSON — zero other text
+2. No markdown, no backticks, no notes
+3. No "Note:" or explanatory sentences
+4. No category names as items
+5. Every item must have a real quantity
+6. Use Indian grocery quantities (grams, pieces, bunches, cups)
 
+RETURN EXACTLY THIS STRUCTURE:
 {
   "categories": [
     {
       "name": "Vegetables",
       "emoji": "🥦",
+      "color": "#22c55e",
       "items": [
         { "name": "Spinach", "quantity": "200g" },
-        { "name": "Tomatoes", "quantity": "4 pcs" }
+        { "name": "Tomato", "quantity": "4 pcs" },
+        { "name": "Onion", "quantity": "3 pcs" }
       ]
     },
     {
       "name": "Fruits",
       "emoji": "🍎",
+      "color": "#f97316",
       "items": [
         { "name": "Banana", "quantity": "6 pcs" }
       ]
@@ -974,6 +1143,7 @@ filling all 6 categories:
     {
       "name": "Proteins",
       "emoji": "🥩",
+      "color": "#8b5cf6",
       "items": [
         { "name": "Chicken breast", "quantity": "500g" }
       ]
@@ -981,13 +1151,16 @@ filling all 6 categories:
     {
       "name": "Grains & Legumes",
       "emoji": "🌾",
+      "color": "#f59e0b",
       "items": [
-        { "name": "Brown rice", "quantity": "1 kg" }
+        { "name": "Basmati rice", "quantity": "1 kg" },
+        { "name": "Dal", "quantity": "500g" }
       ]
     },
     {
       "name": "Dairy & Eggs",
       "emoji": "🥛",
+      "color": "#3b82f6",
       "items": [
         { "name": "Greek yogurt", "quantity": "400g" }
       ]
@@ -995,17 +1168,23 @@ filling all 6 categories:
     {
       "name": "Condiments & Spices",
       "emoji": "🧂",
+      "color": "#64748b",
       "items": [
-        { "name": "Olive oil", "quantity": "1 bottle" }
+        { "name": "Cumin seeds", "quantity": "50g" },
+        { "name": "Ghee", "quantity": "200g" }
       ]
     }
   ],
   "totalItems": 18,
-  "estimatedCost": "₹400-600"
+  "estimatedCost": "₹450-600",
+  "note": ""
 }
 
-Fill each category with actual ingredients 
-from the meal plan. Empty array [] if none.
+IMPORTANT:
+- note field: put any special dietary note HERE only, not as a list item. Empty string if nothing.
+- Fill ONLY categories that have items
+- Skip empty categories entirely
+- Every single item needs a real quantity
 `
 
         try {
@@ -1164,23 +1343,24 @@ from the meal plan. Empty array [] if none.
                     const sectionMatch = aiResponse.match(mealSectionRegex)
                     const mealDetails = sectionMatch ? sectionMatch[1].trim() : aiResponse.trim()
 
-                    // Deep-clone the plan so React detects the change
-                    const updatedMeals = plan.meals.map(m => ({ ...m }))
+                    // Deep-clone the current day's meals so React detects the change
+                    const currentDay = plan.days[selectedDay] || plan.days[0]
+                    if (!currentDay) return
+                    const updatedMeals = currentDay.meals.map((m: Meal) => ({ ...m }))
                     const normalizedDetected = detectedType.toLowerCase().replace(/\d+/, '').trim()
 
-                    const mealIdx = updatedMeals.findIndex(m =>
+                    const mealIdx = updatedMeals.findIndex((m: Meal) =>
                         m.type.toLowerCase() === normalizedDetected
                     )
 
                     if (mealIdx >= 0) {
                         updatedMeals[mealIdx] = {
-                            type: updatedMeals[mealIdx].type, // keep original type label
+                            type: updatedMeals[mealIdx].type,
                             name: dishName,
                             calories: calMatch ? `${calMatch[1]} kcal` : updatedMeals[mealIdx].calories,
                             details: mealDetails,
                         }
                     } else {
-                        // Meal type not found in existing plan — add it
                         updatedMeals.push({
                             type: detectedType.replace(/\d+/, '').trim(),
                             name: dishName,
@@ -1196,10 +1376,21 @@ from the meal plan. Empty array [] if none.
                         if (!isNaN(num)) totalCal += num
                     }
 
-                    const updatedPlan: DayPlan = {
+                    const updatedDays = plan.days.map((d, idx) => {
+                        if (idx === selectedDay) {
+                            return {
+                                ...d,
+                                meals: updatedMeals,
+                                totalCalories: totalCal > 0 ? `${totalCal} kcal` : d.totalCalories,
+                                raw: d.raw + '\n\n--- Updated ---\n' + aiResponse,
+                            }
+                        }
+                        return d
+                    })
+
+                    const updatedPlan: WeekPlan = {
                         ...plan,
-                        meals: updatedMeals,
-                        totalCalories: totalCal > 0 ? `${totalCal} kcal` : plan.totalCalories,
+                        days: updatedDays,
                         raw: plan.raw + '\n\n--- Updated ---\n' + aiResponse,
                     }
                     setPlan(updatedPlan)
@@ -1422,58 +1613,172 @@ from the meal plan. Empty array [] if none.
                                 {/* Meals Tab */}
                                 {plan && !generating && activeTab === 'meals' && (
                                     <>
-                                        {/* Today's Day Card (highlighted) */}
-                                        <div className={`bg-white rounded-2xl p-0 shadow-[0_8px_30px_rgba(33,197,93,0.15)] ring-2 ${highlightSection === 'meals' ? 'ring-4 ring-[#22c55e] scale-[1.01] transition-all duration-500' : 'ring-[#22c55e] transition-all duration-500'} relative z-10`}>
-                                            <div className="flex justify-between items-center mb-4 border-b border-[#22c55e]/10 pb-3 bg-[#f0fdf4] rounded-t-2xl p-5">
-                                                <div className="flex items-center gap-3">
-                                                    <div>
-                                                        <h3 className="font-bold text-slate-900 text-xl flex items-center gap-2">
-                                                            {plan.dayName}
-                                                            <span className="bg-[#22c55e] text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">Today</span>
-                                                        </h3>
-                                                        <p className="text-xs text-[#16a34a] font-medium">{plan.date}</p>
-                                                    </div>
-                                                </div>
-                                                {plan.totalCalories && (
-                                                    <span className="px-3 py-1 bg-white text-[#22c55e] font-bold rounded-full text-xs shadow-sm border border-[#22c55e]/10">
-                                                        {plan.totalCalories}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="space-y-3 px-5 pb-5">
-                                                {plan.meals.map((meal, i) => {
-                                                    const iconInfo = mealIcons[meal.type] || mealIcons['Meal Plan']
-                                                    const isExpanded = showDetails === `meal-${i}`
-                                                    return (
-                                                        <div key={i}>
-                                                            <div
-                                                                className="flex items-center gap-4 p-3 bg-[#f0fdf4]/50 border border-[#22c55e]/10 rounded-xl transition-colors group cursor-pointer hover:bg-[#f0fdf4]"
-                                                                onClick={() => setShowDetails(isExpanded ? null : `meal-${i}`)}
-                                                            >
-                                                                <div className={`${iconInfo.bg} p-2 rounded-lg ${iconInfo.color}`}>
-                                                                    <span className="material-symbols-outlined">{iconInfo.icon}</span>
-                                                                </div>
-                                                                <div className="w-24 text-sm font-bold text-[#22c55e]">{meal.type}</div>
-                                                                <div className="flex-1 text-sm font-semibold text-slate-900">{meal.name}</div>
-                                                                {meal.calories && (
-                                                                    <div className="text-xs font-bold text-slate-500">{meal.calories}</div>
-                                                                )}
-                                                                <span className={`material-symbols-outlined text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} style={{ fontSize: '18px' }}>
-                                                                    expand_more
-                                                                </span>
-                                                            </div>
-                                                            {isExpanded && (
-                                                                <div className="mt-2 ml-14 bg-white rounded-xl border border-slate-100 p-5 text-sm text-slate-700 animate-in">
-                                                                    {renderMealDetails(meal.details, meal.type)}
-                                                                </div>
-                                                            )}
+                                        {/* Day Selector Tabs */}
+                                        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+                                            {plan.days.map((day, idx) => {
+                                                const isToday = idx === getTodayDayIndex()
+                                                const isSelected = idx === selectedDay
+                                                return (
+                                                    <button
+                                                        key={idx}
+                                                        onClick={() => { setSelectedDay(idx); setShowDetails(null) }}
+                                                        className={`flex-shrink-0 px-4 py-2.5 rounded-xl text-xs font-bold transition-all duration-200 border ${isSelected
+                                                            ? 'bg-[#22c55e] text-white border-[#22c55e] shadow-lg shadow-[#22c55e]/20 scale-105'
+                                                            : isToday
+                                                                ? 'bg-[#f0fdf4] text-[#22c55e] border-[#22c55e]/30 hover:bg-[#dcfce7]'
+                                                                : 'bg-white text-slate-600 border-slate-200 hover:border-[#22c55e]/30 hover:bg-slate-50'
+                                                            }`}
+                                                    >
+                                                        <div className="flex flex-col items-center gap-0.5">
+                                                            <span>{day.dayName.slice(0, 3)}</span>
+                                                            <span className="text-[10px] font-medium opacity-70">{day.date}</span>
                                                         </div>
-                                                    )
-                                                })}
-                                            </div>
+                                                        {isToday && !isSelected && (
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-[#22c55e] mx-auto mt-1" />
+                                                        )}
+                                                    </button>
+                                                )
+                                            })}
                                         </div>
 
-                                        {/* Raw Plan View (collapsed by default) */}
+                                        {/* Selected Day Card */}
+                                        {(() => {
+                                            const day = plan.days[selectedDay]
+                                            if (!day) return null
+                                            const isToday = selectedDay === getTodayDayIndex()
+                                            return (
+                                                <div className={`bg-white rounded-2xl p-0 shadow-[0_8px_30px_rgba(33,197,93,0.15)] ring-2 ${highlightSection === 'meals' ? 'ring-4 ring-[#22c55e] scale-[1.01] transition-all duration-500' : 'ring-[#22c55e] transition-all duration-500'} relative z-10`}>
+                                                    <div className="flex justify-between items-center mb-4 border-b border-[#22c55e]/10 pb-3 bg-[#f0fdf4] rounded-t-2xl p-5">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 rounded-xl bg-[#22c55e]/10 flex items-center justify-center">
+                                                                <span className="text-[#22c55e] font-black text-lg">{day.dayNumber}</span>
+                                                            </div>
+                                                            <div>
+                                                                <h3 className="font-bold text-slate-900 text-xl flex items-center gap-2">
+                                                                    {day.dayName}
+                                                                    {isToday && (
+                                                                        <span className="bg-[#22c55e] text-white text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">Today</span>
+                                                                    )}
+                                                                </h3>
+                                                                <p className="text-xs text-[#16a34a] font-medium">{day.date}</p>
+                                                            </div>
+                                                        </div>
+                                                        {day.totalCalories && (
+                                                            <span className="px-3 py-1 bg-white text-[#22c55e] font-bold rounded-full text-xs shadow-sm border border-[#22c55e]/10">
+                                                                {day.totalCalories}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-3 px-5 pb-5">
+                                                        {day.meals.map((meal: Meal, i: number) => {
+                                                            const iconInfo = mealIcons[meal.type] || mealIcons['Meal Plan']
+                                                            const isExpanded = showDetails === `meal-${selectedDay}-${i}`
+                                                            const explKey = `${day.dayName}-${meal.type}`
+                                                            return (
+                                                                <div key={i}>
+                                                                    <div
+                                                                        className="flex items-center gap-4 p-3 bg-[#f0fdf4]/50 border border-[#22c55e]/10 rounded-xl transition-colors group cursor-pointer hover:bg-[#f0fdf4]"
+                                                                        onClick={() => setShowDetails(isExpanded ? null : `meal-${selectedDay}-${i}`)}
+                                                                    >
+                                                                        <div className={`${iconInfo.bg} p-2 rounded-lg ${iconInfo.color}`}>
+                                                                            <span className="material-symbols-outlined">{iconInfo.icon}</span>
+                                                                        </div>
+                                                                        <div className="w-24 text-sm font-bold text-[#22c55e]">{meal.type}</div>
+                                                                        <div className="flex-1 text-sm font-semibold text-slate-900">{meal.name}</div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            {meal.calories && (
+                                                                                <div className="text-xs font-bold text-slate-500">{meal.calories}</div>
+                                                                            )}
+                                                                            {/* Why? button */}
+                                                                            <button
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation()
+                                                                                    fetchMealExplanation(meal.name, meal.type, day.dayName)
+                                                                                }}
+                                                                                className={`opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-lg border transition-all duration-200 ${activeExplanation === explKey
+                                                                                        ? 'opacity-100 bg-[#f0fdf4] text-[#16a34a] border-[#22c55e]'
+                                                                                        : 'bg-[#f8fafc] text-[#64748b] border-[#e2e8f0] hover:border-[#22c55e] hover:text-[#22c55e]'
+                                                                                    }`}>
+                                                                                {loadingExplanation === explKey ? (
+                                                                                    <div className="w-2.5 h-2.5 border border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+                                                                                ) : (
+                                                                                    '🤔'
+                                                                                )}
+                                                                                Why?
+                                                                            </button>
+                                                                        </div>
+                                                                        <span className={`material-symbols-outlined text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} style={{ fontSize: '18px' }}>
+                                                                            expand_more
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {/* AI Explanation Panel */}
+                                                                    {activeExplanation === explKey && mealExplanations[explKey] && (
+                                                                        <div className="mx-3 mt-2 mb-1 flex items-start gap-3 bg-gradient-to-r from-[#f0fdf4] to-[#f8fafc] border border-[#bbf7d0] rounded-xl px-4 py-3">
+                                                                            <div className="w-7 h-7 rounded-full bg-[#22c55e] flex items-center justify-center flex-shrink-0 mt-0.5">
+                                                                                <span className="text-white text-xs">🤖</span>
+                                                                            </div>
+                                                                            <div className="flex-1">
+                                                                                <p className="text-[12px] text-[#374151] leading-relaxed">
+                                                                                    {mealExplanations[explKey]}
+                                                                                </p>
+                                                                                <div className="flex items-center justify-between mt-2">
+                                                                                    <span className="text-[10px] text-[#94a3b8]">⚡ NutriAI · Powered by local Ollama</span>
+                                                                                    <button
+                                                                                        onClick={() => setActiveExplanation(null)}
+                                                                                        className="text-[10px] text-[#94a3b8] hover:text-[#64748b] transition-colors">
+                                                                                        Close ×
+                                                                                    </button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Loading state for explanation */}
+                                                                    {loadingExplanation === explKey && !mealExplanations[explKey] && (
+                                                                        <div className="mx-3 mt-2 mb-1 flex items-center gap-3 bg-[#f0fdf4] border border-[#bbf7d0] rounded-xl px-4 py-3">
+                                                                            <div className="w-4 h-4 border-2 border-[#22c55e] border-t-transparent rounded-full animate-spin" />
+                                                                            <span className="text-[12px] text-[#64748b]">Thinking why this meal was chosen...</span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {isExpanded && (
+                                                                        <div className="mt-2 ml-14 bg-white rounded-xl border border-slate-100 p-5 text-sm text-slate-700 animate-in">
+                                                                            {renderMealDetails(meal.details, meal.type)}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            )
+                                        })()}
+
+                                        {/* Weekly Summary */}
+                                        {plan.weeklySummary && (
+                                            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+                                                <button
+                                                    onClick={() => setShowDetails(showDetails === 'summary' ? null : 'summary')}
+                                                    className="flex items-center justify-between w-full"
+                                                >
+                                                    <h3 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                                        <span className="material-symbols-outlined text-[#22c55e]" style={{ fontSize: '18px' }}>analytics</span>
+                                                        Weekly Summary
+                                                    </h3>
+                                                    <span className={`material-symbols-outlined text-slate-400 transition-transform ${showDetails === 'summary' ? 'rotate-180' : ''}`} style={{ fontSize: '18px' }}>
+                                                        expand_more
+                                                    </span>
+                                                </button>
+                                                {showDetails === 'summary' && (
+                                                    <div className="mt-2 bg-gradient-to-b from-transparent to-slate-50/30 rounded-xl px-2 py-4 max-h-[600px] overflow-y-auto">
+                                                        {renderFullPlanDetails(plan.weeklySummary)}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+
+                                        {/* Full Plan Details (collapsed by default) */}
                                         <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
                                             <button
                                                 onClick={() => setShowDetails(showDetails === 'raw' ? null : 'raw')}
@@ -1546,43 +1851,44 @@ from the meal plan. Empty array [] if none.
 
                                         {/* STATE D — Generated ✅ */}
                                         {shoppingList?.categories && !isGeneratingList && !shoppingListError && (
-                                            <div className="h-full flex flex-col">
+                                            <div className="h-full flex flex-col bg-[#f8fafc]">
 
-                                                {/* ── HEADER ── */}
-                                                <div className="flex items-center justify-between px-5 py-4 border-b border-[#f1f5f9]">
-                                                    <div>
+                                                {/* ── TOP SUMMARY BAR ── */}
+                                                <div className="bg-white px-5 py-4 border-b border-[#e2e8f0]">
+                                                    <div className="flex items-center justify-between mb-3">
                                                         <div className="flex items-center gap-2">
-                                                            <span className="text-lg">🛒</span>
-                                                            <h3 className="font-bold text-[#0f172a] text-[15px]">
-                                                                Shopping List
-                                                            </h3>
-                                                            <span className="bg-[#f0fdf4] text-[#16a34a] text-[11px] font-semibold px-2 py-0.5 rounded-full border border-[#bbf7d0]">
+                                                            <span className="text-xl">🛒</span>
+                                                            <h3 className="font-bold text-[#0f172a] text-[15px]">Shopping List</h3>
+                                                            <span className="bg-[#f0fdf4] text-[#16a34a] text-[11px] font-bold px-2.5 py-0.5 rounded-full border border-[#bbf7d0]">
                                                                 {shoppingList.totalItems} items
                                                             </span>
                                                         </div>
-                                                        <p className="text-[12px] text-[#64748b] mt-0.5">
-                                                            Est. cost: {shoppingList.estimatedCost}
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                        {/* Progress */}
-                                                        <span className="text-[11px] text-[#94a3b8]">
-                                                            {checkedItems.length}/{shoppingList.totalItems} done
-                                                        </span>
-                                                        {/* Refresh button */}
                                                         <button
                                                             onClick={generateShoppingList}
-                                                            className="flex items-center gap-1.5 text-[12px] text-[#22c55e] hover:text-[#16a34a] font-semibold transition-colors px-3 py-1.5 border border-[#22c55e] rounded-lg hover:bg-[#f0fdf4]">
+                                                            className="flex items-center gap-1.5 text-[12px] text-[#22c55e] font-semibold border border-[#22c55e] rounded-lg px-3 py-1.5 hover:bg-[#f0fdf4] transition-colors">
                                                             🔄 Refresh
                                                         </button>
                                                     </div>
-                                                </div>
 
-                                                {/* ── PROGRESS BAR ── */}
-                                                <div className="px-5 py-2 bg-[#f8fafc] border-b border-[#f1f5f9]">
-                                                    <div className="w-full h-1.5 bg-[#e2e8f0] rounded-full">
+                                                    {/* Stats row */}
+                                                    <div className="flex items-center justify-between">
+                                                        <div className="flex items-center gap-4">
+                                                            <span className="text-[12px] text-[#64748b]">💰 Est. {shoppingList.estimatedCost}</span>
+                                                            <span className="text-[12px] text-[#64748b]">✅ {checkedItems.length}/{shoppingList.totalItems} done</span>
+                                                        </div>
+                                                        {checkedItems.length > 0 && (
+                                                            <button
+                                                                onClick={() => setCheckedItems([])}
+                                                                className="text-[11px] text-[#94a3b8] hover:text-[#ef4444] transition-colors">
+                                                                Clear all ×
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Progress bar */}
+                                                    <div className="mt-3 w-full h-1.5 bg-[#e2e8f0] rounded-full overflow-hidden">
                                                         <div
-                                                            className="h-1.5 bg-[#22c55e] rounded-full transition-all duration-300"
+                                                            className="h-full bg-gradient-to-r from-[#22c55e] to-[#16a34a] rounded-full transition-all duration-500"
                                                             style={{
                                                                 width: `${shoppingList.totalItems > 0
                                                                     ? (checkedItems.length / shoppingList.totalItems) * 100
@@ -1592,92 +1898,112 @@ from the meal plan. Empty array [] if none.
                                                     </div>
                                                 </div>
 
-                                                {/* ── CATEGORIES LIST (scrollable) ── */}
-                                                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
-
-                                                    {shoppingList.categories.map((category: ShoppingCategory, catIdx: number) => (
-                                                        <div key={catIdx}>
-
-                                                            {/* Category Header */}
-                                                            <div className="flex items-center gap-2 mb-2">
-                                                                <span className="text-base">
-                                                                    {category.emoji}
-                                                                </span>
-                                                                <span className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">
-                                                                    {category.name}
-                                                                </span>
-                                                                <span className="text-[10px] text-[#94a3b8] bg-[#f1f5f9] px-1.5 py-0.5 rounded-full">
-                                                                    {category.items.length}
-                                                                </span>
-                                                                {/* Thin line after label */}
-                                                                <div className="flex-1 h-px bg-[#f1f5f9]" />
-                                                            </div>
-
-                                                            {/* Items */}
-                                                            <div className="space-y-1.5">
-                                                                {category.items.map((item: ShoppingItem, itemIdx: number) => {
-                                                                    const itemKey = `${catIdx}-${itemIdx}`
-                                                                    const isChecked = checkedItems.includes(itemKey)
-                                                                    return (
-                                                                        <div
-                                                                            key={itemIdx}
-                                                                            onClick={() => toggleItem(itemKey)}
-                                                                            className={`flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer border transition-all duration-150 ${isChecked
-                                                                                ? 'bg-[#f0fdf4] border-[#bbf7d0]'
-                                                                                : 'bg-white border-[#e2e8f0] hover:border-[#22c55e] hover:bg-[#f0fdf4]/50'
-                                                                                }`}
-                                                                        >
-                                                                            <div className="flex items-center gap-3">
-                                                                                {/* Custom checkbox */}
-                                                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-150 ${isChecked
-                                                                                    ? 'bg-[#22c55e] border-[#22c55e]'
-                                                                                    : 'border-[#d1d5db] bg-white'
-                                                                                    }`}>
-                                                                                    {isChecked && (
-                                                                                        <svg className="w-3 h-3 text-white" viewBox="0 0 12 12" fill="none">
-                                                                                            <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                                                                                        </svg>
-                                                                                    )}
-                                                                                </div>
-                                                                                {/* Item name */}
-                                                                                <span className={`text-[13px] font-medium transition-all duration-150 ${isChecked
-                                                                                    ? 'line-through text-[#94a3b8]'
-                                                                                    : 'text-[#0f172a]'
-                                                                                    }`}>
-                                                                                    {item.name}
-                                                                                </span>
-                                                                            </div>
-                                                                            {/* Quantity badge */}
-                                                                            <span className={`text-[11px] font-medium px-2 py-0.5 rounded-lg flex-shrink-0 ${isChecked
-                                                                                ? 'bg-[#dcfce7] text-[#16a34a]'
-                                                                                : 'bg-[#f1f5f9] text-[#64748b]'
-                                                                                }`}>
-                                                                                {item.quantity}
-                                                                            </span>
-                                                                        </div>
-                                                                    )
-                                                                })}
-                                                            </div>
-                                                        </div>
-                                                    ))}
-
-                                                    {/* ── BOTTOM PADDING ── */}
-                                                    <div className="h-4" />
-                                                </div>
-
-                                                {/* ── FOOTER — CLEAR CHECKED ── */}
-                                                {checkedItems.length > 0 && (
-                                                    <div className="px-5 py-3 border-t border-[#f1f5f9] bg-[#f8fafc] flex items-center justify-between rounded-b-2xl">
-                                                        <span className="text-[12px] text-[#64748b]">
-                                                            ✅ {checkedItems.length} items in cart
-                                                        </span>
-                                                        <button
-                                                            onClick={() => setCheckedItems([])}
-                                                            className="text-[12px] text-[#ef4444] hover:text-[#dc2626] font-medium">
-                                                            Clear all ×
-                                                        </button>
+                                                {/* ── SPECIAL DIETARY NOTE ── */}
+                                                {shoppingList.note && (
+                                                    <div className="mx-4 mt-4 flex items-start gap-2 bg-[#fffbeb] border border-[#fde68a] rounded-xl px-4 py-3">
+                                                        <span className="text-base mt-0.5">💡</span>
+                                                        <p className="text-[12px] text-[#92400e] leading-relaxed">{shoppingList.note}</p>
                                                     </div>
                                                 )}
+
+                                                {/* ── CATEGORY TABS ── */}
+                                                <div className="flex gap-2 px-4 pt-4 pb-2 overflow-x-auto scrollbar-hide">
+                                                    <button
+                                                        onClick={() => setActiveCategory('all')}
+                                                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap border transition-all flex-shrink-0 ${activeCategory === 'all'
+                                                            ? 'bg-[#0f172a] text-white border-[#0f172a]'
+                                                            : 'bg-white text-[#64748b] border-[#e2e8f0] hover:border-[#22c55e]'
+                                                            }`}>
+                                                        All ({shoppingList.totalItems})
+                                                    </button>
+                                                    {shoppingList.categories.map((cat: ShoppingCategory) => (
+                                                        <button
+                                                            key={cat.name}
+                                                            onClick={() => setActiveCategory(cat.name)}
+                                                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap border transition-all flex-shrink-0 ${activeCategory === cat.name
+                                                                ? 'text-white border-transparent'
+                                                                : 'bg-white text-[#64748b] border-[#e2e8f0] hover:border-[#22c55e]'
+                                                                }`}
+                                                            style={activeCategory === cat.name
+                                                                ? { backgroundColor: cat.color || '#22c55e' }
+                                                                : {}}>
+                                                            {cat.emoji} {cat.name} ({cat.items.length})
+                                                        </button>
+                                                    ))}
+                                                </div>
+
+                                                {/* ── ITEMS LIST (scrollable) ── */}
+                                                <div className="flex-1 overflow-y-auto px-4 pb-6">
+                                                    {shoppingList.categories
+                                                        .filter((cat: ShoppingCategory) =>
+                                                            activeCategory === 'all' || cat.name === activeCategory)
+                                                        .map((category: ShoppingCategory, catIdx: number) => (
+                                                            <div key={catIdx} className="mb-5">
+
+                                                                {/* Category header (only in "All" view) */}
+                                                                {activeCategory === 'all' && (
+                                                                    <div className="flex items-center gap-2 mb-2 mt-2">
+                                                                        <div className="w-6 h-6 rounded-lg flex items-center justify-center text-sm"
+                                                                            style={{ backgroundColor: (category.color || '#22c55e') + '20' }}>
+                                                                            {category.emoji}
+                                                                        </div>
+                                                                        <span className="text-[11px] font-bold uppercase tracking-wider"
+                                                                            style={{ color: category.color || '#22c55e' }}>
+                                                                            {category.name}
+                                                                        </span>
+                                                                        <span className="text-[10px] text-[#94a3b8] bg-[#f1f5f9] px-1.5 py-0.5 rounded-full">
+                                                                            {category.items.length}
+                                                                        </span>
+                                                                        <div className="flex-1 h-px bg-[#f1f5f9]" />
+                                                                    </div>
+                                                                )}
+
+                                                                {/* Items */}
+                                                                <div className="space-y-2">
+                                                                    {category.items.map((item: ShoppingItem, itemIdx: number) => {
+                                                                        const key = `${catIdx}-${itemIdx}`
+                                                                        const checked = checkedItems.includes(key)
+                                                                        return (
+                                                                            <div
+                                                                                key={itemIdx}
+                                                                                onClick={() => toggleItem(key)}
+                                                                                className={`flex items-center justify-between px-4 py-3 rounded-xl border cursor-pointer transition-all duration-200 group ${checked
+                                                                                    ? 'bg-[#f0fdf4] border-[#bbf7d0]'
+                                                                                    : 'bg-white border-[#e2e8f0] hover:border-[#22c55e]/50 hover:shadow-sm'
+                                                                                    }`}>
+                                                                                <div className="flex items-center gap-3">
+                                                                                    {/* Circle checkbox */}
+                                                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 ${checked
+                                                                                        ? 'bg-[#22c55e] border-[#22c55e]'
+                                                                                        : 'border-[#d1d5db] group-hover:border-[#22c55e]/50'
+                                                                                        }`}>
+                                                                                        {checked && (
+                                                                                            <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10">
+                                                                                                <path d="M1.5 5l2.5 2.5 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+                                                                                            </svg>
+                                                                                        )}
+                                                                                    </div>
+                                                                                    {/* Item name */}
+                                                                                    <span className={`text-[13px] font-medium transition-all ${checked ? 'line-through text-[#94a3b8]' : 'text-[#0f172a]'
+                                                                                        }`}>
+                                                                                        {item.name}
+                                                                                    </span>
+                                                                                </div>
+                                                                                {/* Quantity badge */}
+                                                                                <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg flex-shrink-0 transition-all duration-200 ${checked
+                                                                                    ? 'bg-[#dcfce7] text-[#16a34a]'
+                                                                                    : 'bg-[#f8fafc] text-[#64748b] border border-[#e2e8f0]'
+                                                                                    }`}>
+                                                                                    {item.quantity}
+                                                                                </span>
+                                                                            </div>
+                                                                        )
+                                                                    })}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
                                             </div>
                                         )}
                                     </div>
@@ -1768,7 +2094,7 @@ from the meal plan. Empty array [] if none.
                             <div className="flex gap-2 overflow-x-auto pb-3 no-scrollbar mb-1">
                                 {(plan
                                     ? [
-                                        `Swap ${plan.meals[0]?.type || 'breakfast'} for something lighter`,
+                                        `Swap ${plan.days[selectedDay]?.meals[0]?.type || 'breakfast'} for something lighter`,
                                         'More protein options',
                                         'Make it low-carb',
                                         'Any substitutes for dairy?',

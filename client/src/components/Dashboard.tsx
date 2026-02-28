@@ -91,37 +91,73 @@ function getWeekDays() {
     })
 }
 
+// ─── Meal timing configuration ────────────────────────────────────────────────
+const MEAL_TIMINGS: Record<string, { time: string, hour: number, icon: string }> = {
+    'breakfast': { time: '8:00 AM', hour: 8, icon: '🌅' },
+    'morning snack': { time: '10:30 AM', hour: 10, icon: '🍎' },
+    'lunch': { time: '1:00 PM', hour: 13, icon: '☀️' },
+    'afternoon snack': { time: '3:30 PM', hour: 15, icon: '🍪' },
+    'evening snack': { time: '5:30 PM', hour: 17, icon: '🥜' },
+    'snack': { time: '4:00 PM', hour: 16, icon: '🍎' },
+    'dinner': { time: '7:30 PM', hour: 19, icon: '🌙' },
+    'main meal': { time: '12:30 PM', hour: 12, icon: '🍽️' },
+}
+
 const extractTodayMeals = (plan: any, today: string) => {
     try {
-        // Case 1: plan.days is an array of day objects
-        // { days: [{ day: 'Monday', breakfast: '...', ... }] }
+        // ── NEW: WeekPlan format with days[].dayName + days[].meals[] ──
         if (plan?.days && Array.isArray(plan.days)) {
-            const todayData = plan.days.find((d: any) =>
-                d.day?.toLowerCase()
-                    .includes(today.toLowerCase()) ||
-                d.date?.toLowerCase()
-                    .includes(today.toLowerCase())
+            // Find today's day by dayName matching
+            const todayDay = plan.days.find((d: any) =>
+                d.dayName?.toLowerCase() === today.toLowerCase()
             )
-            if (todayData) return todayData
-            // Fallback: return first day if today not found
-            return plan.days[0]
+            const dayData = todayDay || plan.days[0]
+            if (!dayData) return null
+
+            // If dayData has .meals array, convert to structured format
+            if (dayData.meals && Array.isArray(dayData.meals)) {
+                const result: any = {
+                    dayName: dayData.dayName,
+                    dayNumber: dayData.dayNumber,
+                    totalCalories: dayData.totalCalories,
+                    _meals: dayData.meals.map((m: any) => {
+                        const typeKey = m.type?.toLowerCase() || ''
+                        const timing = MEAL_TIMINGS[typeKey] || { time: '12:00 PM', hour: 12, icon: '🍽️' }
+                        return {
+                            type: m.type,
+                            name: m.name,
+                            calories: m.calories,
+                            time: timing.time,
+                            hour: timing.hour,
+                            icon: timing.icon,
+                        }
+                    })
+                }
+                // Also set legacy keys for backward compat
+                dayData.meals.forEach((m: any) => {
+                    const t = m.type?.toLowerCase() || ''
+                    if (t.includes('breakfast')) result.breakfast = m.name
+                    else if (t.includes('lunch')) result.lunch = m.name
+                    else if (t.includes('dinner')) result.dinner = m.name
+                    else if (t.includes('snack') && !result.snack) result.snack = m.name
+                })
+                return result
+            }
+
+            // Legacy: day has breakfast/lunch/dinner keys directly
+            if (dayData.breakfast || dayData.lunch || dayData.dinner) return dayData
         }
 
-        // Case 2: plan is keyed by day name
-        // { Monday: { breakfast: '...', ... }, ... }
+        // Case 2: plan is keyed by day name  { Monday: { breakfast: '...', ... }, ... }
         if (plan[today]) return plan[today]
 
         // Case 3: plan has a 'week' or 'meals' key
-        if (plan?.week && Array.isArray(plan.week)) {
-            return plan.week[0]
-        }
+        if (plan?.week && Array.isArray(plan.week)) return plan.week[0]
 
         // Case 4: plan itself is today's meals
-        if (plan?.breakfast || plan?.lunch || plan?.dinner) {
-            return plan
-        }
+        if (plan?.breakfast || plan?.lunch || plan?.dinner) return plan
 
-        // Additional check for our specific DayPlan struct from MealPlan
+        // Case 5: old single-day DayPlan struct
         if (plan?.meals && Array.isArray(plan.meals)) {
             const mealObj: any = {}
             plan.meals.forEach((m: any) => {
@@ -149,7 +185,6 @@ export function Dashboard() {
     const [todayMeals, setTodayMeals] = useState<any>(null)
     const [tomorrowMeals, setTomorrowMeals] = useState<any>(null)
     const [mealHistory, setMealHistory] = useState<any[]>([])
-    const [userProfile, setUserProfile] = useState<any>(null)
 
     useEffect(() => {
         // Read generated meal plan
@@ -180,13 +215,7 @@ export function Dashboard() {
         try {
             const history = localStorage.getItem('nutriai_meal_history')
             if (history) setMealHistory(JSON.parse(history))
-        } catch (e) { }
-
-        // Read user profile for stats
-        try {
-            const profile = localStorage.getItem('nutriai_profile')
-            if (profile) setUserProfile(JSON.parse(profile))
-        } catch (e) { }
+        } catch { /* ignore */ }
     }, [])
 
     // Fetch user profile on mount
@@ -427,38 +456,66 @@ export function Dashboard() {
                                             <div className="space-y-2">
                                                 {(() => {
                                                     const currentHour = new Date().getHours()
+
+                                                    // ── NEW FORMAT: use _meals array with timing data ──
+                                                    if (todayMeals._meals && Array.isArray(todayMeals._meals)) {
+                                                        return todayMeals._meals.map((item: any, idx: number) => {
+                                                            const status = currentHour >= item.hour ? 'done' : 'upcoming'
+                                                            return (
+                                                                <div key={idx}
+                                                                    className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${status === 'upcoming' ? 'bg-[#fffbeb] border-[#fde68a]' : 'bg-[#f8fafc] border-[#e2e8f0]'
+                                                                        }`}
+                                                                >
+                                                                    <div className="flex items-center gap-3">
+                                                                        <span className="text-base w-6 text-center">{item.icon}</span>
+                                                                        <div>
+                                                                            <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">
+                                                                                {item.type}
+                                                                                {status === 'upcoming' && (
+                                                                                    <span className="ml-2 text-[#f97316]">•   UPCOMING</span>
+                                                                                )}
+                                                                            </p>
+                                                                            <p className="text-[12px] sm:text-[13px] font-semibold text-[#0f172a] leading-tight mt-0.5">
+                                                                                {typeof item.name === 'string'
+                                                                                    ? item.name.split('(')[0].trim()
+                                                                                    : 'See meal plan'}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-right flex flex-col items-end gap-0.5">
+                                                                        <span className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-lg font-semibold ${status === 'done' ? 'bg-[#dcfce7] text-[#16a34a]' : 'bg-[#fff7ed] text-[#f97316]'
+                                                                            }`}>
+                                                                            {status === 'done' ? '✓ Done' : item.time}
+                                                                        </span>
+                                                                        {item.calories && (
+                                                                            <span className="text-[10px] text-[#94a3b8]">{item.calories}</span>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )
+                                                        })
+                                                    }
+
+                                                    // ── LEGACY FORMAT: breakfast/lunch/dinner keys ──
                                                     return [
                                                         {
-                                                            type: 'BREAKFAST',
-                                                            icon: '🌅',
-                                                            meal: todayMeals.breakfast,
-                                                            time: '8:00 AM',
-                                                            status: currentHour >= 8 ? 'done' : 'upcoming'
+                                                            type: 'BREAKFAST', icon: '🌅', meal: todayMeals.breakfast,
+                                                            time: '8:00 AM', status: currentHour >= 8 ? 'done' : 'upcoming'
                                                         },
                                                         {
-                                                            type: 'LUNCH',
-                                                            icon: '☀️',
-                                                            meal: todayMeals.lunch,
-                                                            time: '1:00 PM',
-                                                            status: currentHour >= 13 ? 'done' : 'upcoming'
+                                                            type: 'LUNCH', icon: '☀️', meal: todayMeals.lunch,
+                                                            time: '1:00 PM', status: currentHour >= 13 ? 'done' : 'upcoming'
                                                         },
                                                         todayMeals.snack && {
-                                                            type: 'SNACK',
-                                                            icon: '🍎',
-                                                            meal: todayMeals.snack,
-                                                            time: '4:00 PM',
-                                                            status: currentHour >= 16 ? 'done' : 'upcoming'
+                                                            type: 'SNACK', icon: '🍎', meal: todayMeals.snack,
+                                                            time: '4:00 PM', status: currentHour >= 16 ? 'done' : 'upcoming'
                                                         },
                                                         {
-                                                            type: 'DINNER',
-                                                            icon: '🌙',
-                                                            meal: todayMeals.dinner,
-                                                            time: '7:00 PM',
-                                                            status: currentHour >= 19 ? 'done' : 'upcoming'
+                                                            type: 'DINNER', icon: '🌙', meal: todayMeals.dinner,
+                                                            time: '7:00 PM', status: currentHour >= 19 ? 'done' : 'upcoming'
                                                         },
                                                     ]
                                                         .filter(item => item && item.meal)
-
                                                         .map((item: any, idx: number) => (
                                                             <div key={idx}
                                                                 className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${item.status === 'upcoming' ? 'bg-[#fffbeb] border-[#fde68a]' : 'bg-[#f8fafc] border-[#e2e8f0]'
@@ -474,7 +531,6 @@ export function Dashboard() {
                                                                             )}
                                                                         </p>
                                                                         <p className="text-[12px] sm:text-[13px] font-semibold text-[#0f172a] leading-tight mt-0.5">
-                                                                            {/* Clean meal name — remove extra text */}
                                                                             {typeof item.meal === 'string'
                                                                                 ? item.meal.split('(')[0].trim()
                                                                                 : item.meal?.name || 'See meal plan'}
@@ -491,51 +547,69 @@ export function Dashboard() {
                                                         ))
                                                 })()}
 
-                                                {/* Tomorrow's First Meal */}
-                                                {tomorrowMeals && (tomorrowMeals.breakfast || tomorrowMeals.lunch) && (
+                                                {/* Tomorrow's Meal Overview */}
+                                                {tomorrowMeals && (
                                                     <div className="pt-3 mt-2 border-t border-dashed border-[#e2e8f0]">
                                                         <p className="text-[10px] sm:text-[11px] font-bold text-[#94a3b8] uppercase tracking-wide mb-2 pl-1">
-                                                            Tomorrow's Plan
+                                                            Tomorrow's Plan {tomorrowMeals.dayName && `· ${tomorrowMeals.dayName}`}
                                                         </p>
-                                                        <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border bg-[#f8fafc] border-[#e2e8f0] opacity-80 hover:opacity-100 transition-opacity cursor-default">
-                                                            <div className="flex items-center gap-3">
-                                                                <span className="text-base w-6 text-center">
-                                                                    {tomorrowMeals.breakfast ? '🌅' : '☀️'}
-                                                                </span>
-                                                                <div>
-                                                                    <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">
-                                                                        {tomorrowMeals.breakfast ? 'BREAKFAST' : 'LUNCH'}
+                                                        {tomorrowMeals._meals && Array.isArray(tomorrowMeals._meals) ? (
+                                                            // New format: show all tomorrow meals compactly
+                                                            <div className="space-y-1.5">
+                                                                {tomorrowMeals._meals.slice(0, 3).map((m: any, idx: number) => (
+                                                                    <div key={idx} className="flex items-center justify-between px-3 py-2 rounded-xl border bg-[#f8fafc] border-[#e2e8f0] opacity-80 hover:opacity-100 transition-opacity">
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="text-sm">{m.icon}</span>
+                                                                            <div>
+                                                                                <p className="text-[10px] font-bold text-[#94a3b8] uppercase">{m.type}</p>
+                                                                                <p className="text-[11px] font-semibold text-[#374151] leading-tight">
+                                                                                    {typeof m.name === 'string' ? m.name.split('(')[0].trim() : 'See plan'}
+                                                                                </p>
+                                                                            </div>
+                                                                        </div>
+                                                                        <span className="text-[10px] px-2 py-0.5 rounded-lg font-semibold bg-[#f1f5f9] text-[#64748b]">
+                                                                            {m.time}
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                                {tomorrowMeals._meals.length > 3 && (
+                                                                    <p className="text-[10px] text-[#94a3b8] text-center">
+                                                                        +{tomorrowMeals._meals.length - 3} more meals
                                                                     </p>
-                                                                    <p className="text-[12px] sm:text-[13px] font-semibold text-[#0f172a] leading-tight mt-0.5">
-                                                                        {typeof (tomorrowMeals.breakfast || tomorrowMeals.lunch) === 'string'
-                                                                            ? (tomorrowMeals.breakfast || tomorrowMeals.lunch).split('(')[0].trim()
-                                                                            : (tomorrowMeals.breakfast || tomorrowMeals.lunch)?.name || 'See meal plan'}
-                                                                    </p>
-                                                                </div>
+                                                                )}
                                                             </div>
-                                                            <div className="text-right">
+                                                        ) : (tomorrowMeals.breakfast || tomorrowMeals.lunch) ? (
+                                                            // Legacy format
+                                                            <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border bg-[#f8fafc] border-[#e2e8f0] opacity-80 hover:opacity-100 transition-opacity cursor-default">
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-base w-6 text-center">
+                                                                        {tomorrowMeals.breakfast ? '🌅' : '☀️'}
+                                                                    </span>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">
+                                                                            {tomorrowMeals.breakfast ? 'BREAKFAST' : 'LUNCH'}
+                                                                        </p>
+                                                                        <p className="text-[12px] sm:text-[13px] font-semibold text-[#0f172a] leading-tight mt-0.5">
+                                                                            {typeof (tomorrowMeals.breakfast || tomorrowMeals.lunch) === 'string'
+                                                                                ? (tomorrowMeals.breakfast || tomorrowMeals.lunch).split('(')[0].trim()
+                                                                                : (tomorrowMeals.breakfast || tomorrowMeals.lunch)?.name || 'See meal plan'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
                                                                 <span className="text-[10px] sm:text-[11px] px-2 py-1 rounded-lg font-semibold bg-[#f1f5f9] text-[#64748b]">
                                                                     Upcoming
                                                                 </span>
                                                             </div>
-                                                        </div>
+                                                        ) : null}
                                                     </div>
                                                 )}
 
                                                 {/* Total calories from profile */}
-                                                {userProfile?.calories && (
+                                                {todayMeals.totalCalories && (
                                                     <div className="pt-3 mt-2 border-t border-[#f1f5f9] flex items-center justify-between">
-                                                        <span className="text-[12px] text-[#64748b]">Daily target</span>
+                                                        <span className="text-[12px] text-[#64748b]">Day total</span>
                                                         <span className="text-[12px] font-bold text-[#f97316]">
-                                                            🔥 {userProfile.calories} kcal
-                                                        </span>
-                                                    </div>
-                                                )}
-                                                {userProfile?.bmi && !userProfile?.calories && (
-                                                    <div className="pt-3 mt-2 border-t border-[#f1f5f9] flex items-center justify-between">
-                                                        <span className="text-[12px] text-[#64748b]">Daily target</span>
-                                                        <span className="text-[12px] font-bold text-[#f97316]">
-                                                            🔥 ~2000 kcal
+                                                            🔥 {todayMeals.totalCalories}
                                                         </span>
                                                     </div>
                                                 )}
