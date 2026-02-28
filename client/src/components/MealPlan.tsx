@@ -518,6 +518,11 @@ export function MealPlan() {
     const [chatLoading, setChatLoading] = useState(false)
     const [showDetails, setShowDetails] = useState<string | null>(null)
     const [activeTab, setActiveTab] = useState<'meals' | 'shopping'>('meals')
+
+    // Speech UI
+    const [isListening, setIsListening] = useState(false)
+    const [interimText, setInterimText] = useState('')
+    const recognitionRef = useRef<any>(null)
     const [highlightSection, setHighlightSection] = useState<'meals' | 'shopping' | null>(null)
     const [checkedItems, setCheckedItems] = useState<string[]>([])
 
@@ -1246,7 +1251,68 @@ from the meal plan. Empty array [] if none.
         }
     }, [navigate])
 
-    // ─── Render ──────────────────────────────────────────────────────────────
+    // ─── Speech Recognition Logic ─────────────────────────────────────────────
+    const startListening = () => {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        if (!SpeechRecognition) {
+            alert('Voice input not supported in this browser. Please use Chrome.')
+            return
+        }
+
+        const recognition = new SpeechRecognition()
+        recognitionRef.current = recognition
+        recognition.lang = 'en-US'
+        recognition.continuous = true
+        recognition.interimResults = true
+
+        recognition.onstart = () => {
+            setIsListening(true)
+            recognitionRef.current.originalText = chatInput ? chatInput + ' ' : ''
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onresult = (event: any) => {
+            let finalTranscript = ''
+            let currentInterim = ''
+
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const transcript = event.results[i][0].transcript
+                if (event.results[i].isFinal) {
+                    finalTranscript += transcript + ' '
+                } else {
+                    currentInterim += transcript
+                }
+            }
+
+            if (finalTranscript) {
+                recognitionRef.current.originalText += finalTranscript
+                setChatInput(recognitionRef.current.originalText)
+            }
+            setInterimText(currentInterim)
+        }
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        recognition.onerror = (event: any) => {
+            console.error('Speech error:', event.error)
+            setIsListening(false)
+        }
+
+        recognition.onend = () => {
+            setIsListening(false)
+            setInterimText('')
+        }
+
+        recognition.start()
+    }
+
+    const stopListening = () => {
+        recognitionRef.current?.stop()
+        setIsListening(false)
+    }
+
+    const toggleListening = () => isListening ? stopListening() : startListening()
+
+    // ─── Save & Persistence ──────────────────────────────────────────────────────────────
     return (
         <PageWrapper>
             <div className="bg-[#f8fafc] text-slate-900 overflow-hidden h-screen flex relative">
@@ -1725,23 +1791,43 @@ from the meal plan. Empty array [] if none.
                                     </button>
                                 ))}
                             </div>
-                            <div className="relative">
-                                <input
-                                    value={chatInput}
-                                    onChange={e => setChatInput(e.target.value)}
-                                    onKeyDown={e => { if (e.key === 'Enter') handleChat() }}
-                                    disabled={chatLoading || generating}
-                                    className="w-full pl-4 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 focus:border-[#22c55e] placeholder-slate-400 disabled:opacity-50"
-                                    placeholder="e.g. Swap lunch for something lighter, more protein..."
-                                    type="text"
-                                />
-                                <button
-                                    onClick={handleChat}
-                                    disabled={!chatInput.trim() || chatLoading || generating}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-[#22c55e] text-white rounded-lg hover:bg-[#16a34a] transition-colors flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_upward</span>
-                                </button>
+                            <div className="relative flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        value={chatInput + interimText}
+                                        onChange={e => {
+                                            setChatInput(e.target.value)
+                                            if (recognitionRef.current) {
+                                                recognitionRef.current.originalText = e.target.value
+                                            }
+                                        }}
+                                        onKeyDown={e => { if (e.key === 'Enter') handleChat() }}
+                                        disabled={chatLoading || generating}
+                                        className={`w-full pl-11 pr-12 py-3 bg-slate-50 border rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-[#22c55e]/20 focus:border-[#22c55e] placeholder-slate-400 disabled:opacity-50 ${isListening ? 'border-[#22c55e] ring-2 ring-[#22c55e]/10' : 'border-slate-200'}`}
+                                        placeholder="e.g. Swap lunch for something lighter..."
+                                        type="text"
+                                    />
+                                    {/* Voice Toggle Button inside input */}
+                                    <button
+                                        onClick={toggleListening}
+                                        disabled={chatLoading || generating}
+                                        className={`absolute left-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg flex items-center justify-center transition-colors disabled:opacity-50 ${isListening ? 'text-[#ef4444] bg-red-50 animate-pulse' : 'text-slate-400 hover:text-[#22c55e] hover:bg-slate-100'}`}
+                                        title={isListening ? 'Stop listening' : 'Start voice typing'}
+                                    >
+                                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                                            {isListening ? 'mic' : 'mic_none'}
+                                        </span>
+                                    </button>
+
+                                    {/* Send button */}
+                                    <button
+                                        onClick={handleChat}
+                                        disabled={!chatInput.trim() || chatLoading || generating}
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-[#22c55e] text-white rounded-lg hover:bg-[#16a34a] transition-colors flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                        <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>arrow_upward</span>
+                                    </button>
+                                </div>
                             </div>
                             <div className="flex justify-center mt-2">
                                 <span className="text-[10px] text-slate-400 font-medium">Powered by Llama 3.1 via Ollama</span>
