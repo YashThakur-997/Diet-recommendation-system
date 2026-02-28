@@ -96,4 +96,32 @@ const streamPlan = async (req, res, next) => {
     }
 };
 
-module.exports = { listModels, generatePlan, streamPlan };
+// ─── Chat feedback (iterative conversation) ───────────────────────────────────
+const chatFeedback = async (req, res, next) => {
+    try {
+        const { model, profile: profileData, currentPlan, userMessage, history } = req.body;
+        const selectedModel = model || DEFAULT_MODEL;
+
+        if (!profileData) {
+            return res.status(400).json({ success: false, error: "`profile` is required." });
+        }
+        if (!userMessage) {
+            return res.status(400).json({ success: false, error: "`userMessage` is required." });
+        }
+
+        const profileStr = profile.buildProfileSummary(profileData);
+        const prompt = require("../services/prompts").chatFeedbackPrompt(
+            profileStr,
+            currentPlan || "No meal plan generated yet.",
+            userMessage,
+            history || []
+        );
+
+        const response = await ollama.generate(selectedModel, prompt);
+        res.json({ success: true, response, model: selectedModel });
+    } catch (err) {
+        next(err);
+    }
+};
+
+module.exports = { listModels, generatePlan, streamPlan, chatFeedback };

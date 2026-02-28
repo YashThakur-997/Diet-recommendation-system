@@ -24,6 +24,22 @@ type UserProfile = {
     createdAt?: string
 }
 
+type Meal = {
+    type: string
+    name: string
+    calories: string
+    details: string
+}
+
+type DayPlan = {
+    dayName: string
+    date: string
+    totalCalories: string
+    meals: Meal[]
+    raw: string
+}
+
+
 // ─── Helper: time-based greeting ─────────────────────────────────────────────
 function getGreeting(): string {
     const hour = new Date().getHours()
@@ -94,9 +110,18 @@ export function Dashboard() {
     const [user, setUser] = useState<UserProfile | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
+    const [plan, setPlan] = useState<DayPlan | null>(null)
 
     // Fetch user profile on mount
     useEffect(() => {
+        const savedPlan = localStorage.getItem('nutriai_meal_plan')
+        if (savedPlan) {
+            try {
+                setPlan(JSON.parse(savedPlan))
+            } catch (err) {
+                console.error("Failed to parse meal plan from localStorage", err)
+            }
+        }
         const token = localStorage.getItem('token')
         if (!token) {
             navigate('/signin')
@@ -320,73 +345,63 @@ export function Dashboard() {
                                         <button onClick={() => navigate('/meal-plan')} className="text-xs sm:text-sm text-[#22c55e] font-medium hover:underline">Edit Plan</button>
                                     </div>
                                     <div className="flex-1 p-3 sm:p-4 space-y-2 sm:space-y-3 overflow-y-auto">
-                                        {/* Breakfast */}
-                                        <div className="flex items-center p-2.5 sm:p-3 rounded-xl hover:bg-slate-50 transition-colors group">
-                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#f0fdf4] flex items-center justify-center text-[#16a34a] mr-3 sm:mr-4 shrink-0">
-                                                <span className="material-symbols-outlined text-[20px]">egg_alt</span>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[10px] sm:text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wide">Breakfast</p>
-                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">Oatmeal &amp; Berries</p>
-                                            </div>
-                                            <div className="text-right shrink-0 ml-2">
-                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#dcfce7] text-[#16a34a]">
-                                                    Done
-                                                </span>
-                                                <p className="text-[12px] sm:text-[13px] text-[#64748b] mt-1">350 kcal</p>
-                                            </div>
-                                        </div>
+                                        {plan?.meals && plan.meals.length > 0 ? (
+                                            plan.meals.map((meal, index) => {
+                                                const type = meal.type || 'Meal';
 
-                                        {/* Lunch */}
-                                        <div className="flex items-center p-2.5 sm:p-3 rounded-xl hover:bg-slate-50 transition-colors group">
-                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#f0fdf4] flex items-center justify-center text-[#16a34a] mr-3 sm:mr-4 shrink-0">
-                                                <span className="material-symbols-outlined text-[20px]">lunch_dining</span>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[10px] sm:text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wide">Lunch</p>
-                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">Grilled Chicken Salad</p>
-                                            </div>
-                                            <div className="text-right shrink-0 ml-2">
-                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#dcfce7] text-[#16a34a]">
-                                                    Done
-                                                </span>
-                                                <p className="text-[12px] sm:text-[13px] text-[#64748b] mt-1">520 kcal</p>
-                                            </div>
-                                        </div>
+                                                let icon = 'restaurant';
+                                                let isHighlighted = false;
 
-                                        {/* Dinner (Highlighted) */}
-                                        <div className="flex items-center p-2.5 sm:p-3 rounded-[10px] bg-[#fffbeb] border border-amber-100">
-                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white flex items-center justify-center text-[#f97316] mr-3 sm:mr-4 shadow-sm shrink-0">
-                                                <span className="material-symbols-outlined text-[20px]">restaurant</span>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[10px] sm:text-[11px] font-bold text-[#f97316] uppercase tracking-wide">Dinner • Upcoming</p>
-                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">Salmon &amp; Quinoa Bowl</p>
-                                            </div>
-                                            <div className="text-right shrink-0 ml-2">
-                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#fff7ed] text-[#f97316]">
-                                                    7:00 PM
-                                                </span>
-                                                <p className="text-[12px] sm:text-[13px] text-[#0f172a] mt-1 font-medium">650 kcal</p>
-                                            </div>
-                                        </div>
+                                                if (type.toLowerCase().includes('breakfast')) { icon = 'egg_alt'; }
+                                                else if (type.toLowerCase().includes('lunch')) { icon = 'lunch_dining'; }
+                                                else if (type.toLowerCase().includes('dinner')) { icon = 'restaurant'; isHighlighted = true; }
+                                                else if (type.toLowerCase().includes('snack')) { icon = 'cookie'; }
 
-                                        {/* Snack */}
-                                        <div className="flex items-center p-2.5 sm:p-3 rounded-xl hover:bg-slate-50 transition-colors group opacity-70">
-                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 mr-3 sm:mr-4 shrink-0">
-                                                <span className="material-symbols-outlined text-[20px]">cookie</span>
+                                                if (isHighlighted) {
+                                                    return (
+                                                        <div key={index} className="flex items-center p-2.5 sm:p-3 rounded-[10px] bg-[#fffbeb] border border-amber-100">
+                                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white flex items-center justify-center text-[#f97316] mr-3 sm:mr-4 shadow-sm shrink-0">
+                                                                <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <p className="text-[10px] sm:text-[11px] font-bold text-[#f97316] uppercase tracking-wide">{type}</p>
+                                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">{meal.name}</p>
+                                                            </div>
+                                                            <div className="text-right shrink-0 ml-2">
+                                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#fff7ed] text-[#f97316]">
+                                                                    Plan
+                                                                </span>
+                                                                <p className="text-[12px] sm:text-[13px] text-[#0f172a] mt-1 font-medium">{meal.calories || '-- kcal'}</p>
+                                                            </div>
+                                                        </div>
+                                                    )
+                                                }
+
+                                                return (
+                                                    <div key={index} className="flex items-center p-2.5 sm:p-3 rounded-xl hover:bg-slate-50 transition-colors group">
+                                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#f0fdf4] flex items-center justify-center text-[#16a34a] mr-3 sm:mr-4 shrink-0">
+                                                            <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-[10px] sm:text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wide">{type}</p>
+                                                            <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">{meal.name}</p>
+                                                        </div>
+                                                        <div className="text-right shrink-0 ml-2">
+                                                            <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#dcfce7] text-[#16a34a]">
+                                                                Plan
+                                                            </span>
+                                                            <p className="text-[12px] sm:text-[13px] text-[#64748b] mt-1">{meal.calories || '-- kcal'}</p>
+                                                        </div>
+                                                    </div>
+                                                )
+                                            })
+                                        ) : (
+                                            <div className="flex flex-col items-center justify-center h-full text-center py-6">
+                                                <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">restaurant</span>
+                                                <p className="text-sm font-medium text-slate-500">No meals planned today</p>
+                                                <button onClick={() => navigate('/meal-plan')} className="mt-2 text-xs text-[#22c55e] font-semibold hover:underline">Generate Plan</button>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-[10px] sm:text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wide">Snack</p>
-                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">Greek Yogurt</p>
-                                            </div>
-                                            <div className="text-right shrink-0 ml-2">
-                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#f1f5f9] text-[#64748b]">
-                                                    Pending
-                                                </span>
-                                                <p className="text-[12px] sm:text-[13px] text-[#64748b] mt-1">120 kcal</p>
-                                            </div>
-                                        </div>
+                                        )}
                                     </div>
                                 </div>
 

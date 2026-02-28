@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Mail, Lock, Eye, EyeOff, Leaf } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 
 export function SignIn() {
     const [email, setEmail] = useState('')
@@ -8,6 +8,14 @@ export function SignIn() {
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const navigate = useNavigate()
+
+    useEffect(() => {
+        localStorage.removeItem('nutriai_chat_messages')
+        localStorage.removeItem('nutriai_meal_plan')
+        localStorage.removeItem('nutriai_plan_week')
+        localStorage.removeItem('nutriai_user')
+        localStorage.removeItem('token')
+    }, [])
 
     const handleLogin = () => {
         if (!email || !password) {
@@ -68,9 +76,9 @@ export function SignIn() {
 
                 {/* Branding */}
                 <div className="absolute bottom-10 left-10 z-20">
-                    <div className="flex items-center gap-2 mb-1">
-                        <Leaf className="w-8 h-8 text-[#22c55e]" />
-                        <h1 className="text-white text-[28px] font-bold tracking-tight">NutriAI</h1>
+                    <div className="flex items-center gap-3 mb-1">
+                        <img src="/favicon.jpg" alt="NutriAI" className="w-12 h-12 rounded-xl object-cover shadow-sm border border-white/10" />
+                        <h1 className="text-white text-[38px] font-black tracking-tighter">NutriAI</h1>
                     </div>
                     <p className="text-white/80 text-[16px] mb-6">Your Personal AI Nutritionist</p>
 
