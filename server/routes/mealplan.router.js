@@ -7,6 +7,7 @@ const {
     listModels,
     generatePlan,
     streamPlan,
+    chatFeedback,
 } = require("../controllers/mealplan.controller");
 
 // GET  /api/meal-plan/models      → list available Ollama models
@@ -17,5 +18,8 @@ router.post("/generate", generatePlan);
 
 // POST /api/meal-plan/stream      → generate full plan (SSE streaming)
 router.post("/stream", streamPlan);
+
+// POST /api/meal-plan/chat        → iterative feedback chat
+router.post("/chat", chatFeedback);
 
 module.exports = router;

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 
@@ -8,6 +8,14 @@ export function SignIn() {
     const [showPassword, setShowPassword] = useState(false)
     const [error, setError] = useState('')
     const navigate = useNavigate()
+
+    useEffect(() => {
+        localStorage.removeItem('nutriai_chat_messages')
+        localStorage.removeItem('nutriai_meal_plan')
+        localStorage.removeItem('nutriai_plan_week')
+        localStorage.removeItem('nutriai_user')
+        localStorage.removeItem('token')
+    }, [])
 
     const handleLogin = () => {
         if (!email || !password) {

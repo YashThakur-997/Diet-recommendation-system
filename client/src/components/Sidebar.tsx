@@ -1,7 +1,17 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 
 export function Sidebar() {
     const location = useLocation()
+    const navigate = useNavigate()
+
+    const handleLogout = () => {
+        localStorage.removeItem('nutriai_chat_messages')
+        localStorage.removeItem('nutriai_meal_plan')
+        localStorage.removeItem('nutriai_plan_week')
+        localStorage.removeItem('nutriai_user')
+        localStorage.removeItem('token')
+        navigate('/signin')
+    }
 
     const navItems = [
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
@@ -44,7 +54,7 @@ export function Sidebar() {
 
             {/* User Profile Bottom */}
             <div className="p-4 border-t border-slate-200">
-                <Link to="/signin" className="flex items-center gap-3 p-2 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition-colors text-[#374151]">
+                <button onClick={handleLogout} className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-[#f8fafc] cursor-pointer transition-colors text-[#374151]">
                     <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden relative border border-slate-200">
                         <img
                             alt="User Avatar"
@@ -52,12 +62,12 @@ export function Sidebar() {
                             src="https://lh3.googleusercontent.com/aida-public/AB6AXuA2Foj2ALR7y132-1P1wzMkY2FYcGsO58kHJc2l9S-pO01IfH8TH6WjRMydBVWaBeaErGfMC7VkfSMQ0qOoFaZZeDp91fIDI4ZaSxx2dV89vIxlpYdV49LzEwI4-anVQfoV5VJIcneNdFk5W9vnN1CzqYDfJuJ8tG56y6bTwoAQUT0bnBsAosOgkpK7EV1LEqj6AlvabsFYKFawvhOgQsp86wFzXdSLYdC7CedLX6fMXWAnTU6-StfDs4aqXi2_y9TZpaBf-TyuPJ9I"
                         />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 text-left">
                         <p className="text-sm font-semibold text-[#0f172a] truncate">Rahul S.</p>
                         <p className="text-xs text-[#64748b] truncate">Pro Member</p>
                     </div>
-                    <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '20px' }}>more_vert</span>
-                </Link>
+                    <span className="material-symbols-outlined text-slate-400" style={{ fontSize: '20px' }}>logout</span>
+                </button>
             </div>
         </aside>
     )
