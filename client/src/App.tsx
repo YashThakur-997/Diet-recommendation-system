@@ -6,6 +6,7 @@ import { MealPlan } from './components/MealPlan'
 import { HealthProfile } from './components/HealthProfile'
 import { SignIn } from './pages/SignIn'
 import { SignUp } from './pages/SignUp'
+import { Wearables } from './pages/Wearables'
 import './App.css'
 
 function AnimatedRoutes() {
@@ -20,6 +21,7 @@ function AnimatedRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/meal-plan" element={<MealPlan />} />
         <Route path="/health-profile" element={<HealthProfile />} />
+        <Route path="/wearables" element={<Wearables />} />
       </Routes>
     </AnimatePresence>
   )

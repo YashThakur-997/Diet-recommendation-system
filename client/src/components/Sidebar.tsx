@@ -63,6 +63,7 @@ export function Sidebar() {
         { label: 'Dashboard', icon: 'dashboard', path: '/dashboard' },
         { label: 'My Meal Plan', icon: 'restaurant_menu', path: '/meal-plan' },
         { label: 'Health Profile', icon: 'person', path: '/health-profile' },
+        { label: 'Wearables', icon: 'watch', path: '/wearables' },
     ]
 
     return (

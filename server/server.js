@@ -110,6 +110,15 @@ app.use("/api/auth", ...dataSafetyMiddleware.forAuth(), authRouter);
 // ─── Protected routes (with full PII/PHI data safety) ─────────────────────────
 app.use("/api/meal-plan", authMiddleware, ...dataSafetyMiddleware.forMealPlan(), mealPlanRouter);
 
+// ─── Optional Wearables Route (Strava integration) ────────────────────────────
+try {
+  const wearablesRouter = require("./routes/wearables.router");
+  app.use("/api/wearables", wearablesRouter);
+  console.log("  🔌 Wearables module loaded successfully.");
+} catch (e) {
+  // Gracefully handle if wearables.router.js has been removed
+}
+
 // ─── Data-safety audit endpoint (protected) ──────────────────────────────────
 app.get("/api/data-safety/audit", authMiddleware, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
