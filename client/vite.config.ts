@@ -5,6 +5,11 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: {
+    headers: {
+      // Required for Google Sign-In popup to communicate via postMessage
+      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
+      'Cross-Origin-Embedder-Policy': 'unsafe-none',
+    },
     proxy: {
       '/api': {
         target: 'http://localhost:3000',

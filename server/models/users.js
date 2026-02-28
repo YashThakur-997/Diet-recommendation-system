@@ -8,7 +8,8 @@ let userSchema = new mongoose.Schema({
     // ─── Auth fields ─────────────────────────────────────────────────────────
     username: { type: String, required: true, unique: true },
     email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
+    password: { type: String, required: false },  // omitted for Google sign-in
+    googleId: { type: String, required: false, sparse: true, unique: true },
 
     // ─── Basic Body Metrics ──────────────────────────────────────────────────
     age: { type: Number },

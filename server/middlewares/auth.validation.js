@@ -29,7 +29,19 @@ const loginvalidation = (req, res, next) => {
     next();
 };
 
+const googleValidation = (req, res, next) => {
+    const schema = joi.object({
+        credential: joi.string().required(),
+    });
+    const error = schema.validate(req.body).error;
+    if (error) {
+        return res.status(400).send({ message: error.details[0].message || "Missing Google credential" });
+    }
+    next();
+};
+
 module.exports = {
     signupvalidation,
-    loginvalidation
-}
+    loginvalidation,
+    googleValidation,
+};
