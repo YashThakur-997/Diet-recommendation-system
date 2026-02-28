@@ -710,6 +710,30 @@ export function MealPlan() {
             if (fullMealPlan) {
                 const parsed = parseMealPlan(fullMealPlan)
                 setPlan(parsed)
+
+                const saveToHistory = (newPlan: any) => {
+                    try {
+                        const existing = localStorage.getItem('nutriai_meal_history')
+                        const history = existing ? JSON.parse(existing) : []
+
+                        const newEntry = {
+                            id: Date.now(),
+                            date: new Date().toLocaleDateString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: 'numeric'
+                            }),
+                            weekLabel: `Week of ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`,
+                            plan: newPlan,
+                            totalDays: newPlan?.days?.length || 7
+                        }
+
+                        const updated = [newEntry, ...history].slice(0, 5)
+                        localStorage.setItem('nutriai_meal_history', JSON.stringify(updated))
+                    } catch (e) { console.error(e) }
+                }
+                saveToHistory(parsed)
+
                 setChatMessages(prev => [...prev, {
                     role: 'ai',
                     text: `✅ Your meal plan is ready! I've created a ${parsed.meals.length}-meal plan${parsed.totalCalories ? ` totalling ~${parsed.totalCalories}` : ''} based on your health profile.`,

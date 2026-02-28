@@ -24,20 +24,7 @@ type UserProfile = {
     createdAt?: string
 }
 
-type Meal = {
-    type: string
-    name: string
-    calories: string
-    details: string
-}
 
-type DayPlan = {
-    dayName: string
-    date: string
-    totalCalories: string
-    meals: Meal[]
-    raw: string
-}
 
 
 // ─── Helper: time-based greeting ─────────────────────────────────────────────
@@ -104,24 +91,106 @@ function getWeekDays() {
     })
 }
 
+const extractTodayMeals = (plan: any, today: string) => {
+    try {
+        // Case 1: plan.days is an array of day objects
+        // { days: [{ day: 'Monday', breakfast: '...', ... }] }
+        if (plan?.days && Array.isArray(plan.days)) {
+            const todayData = plan.days.find((d: any) =>
+                d.day?.toLowerCase()
+                    .includes(today.toLowerCase()) ||
+                d.date?.toLowerCase()
+                    .includes(today.toLowerCase())
+            )
+            if (todayData) return todayData
+            // Fallback: return first day if today not found
+            return plan.days[0]
+        }
+
+        // Case 2: plan is keyed by day name
+        // { Monday: { breakfast: '...', ... }, ... }
+        if (plan[today]) return plan[today]
+
+        // Case 3: plan has a 'week' or 'meals' key
+        if (plan?.week && Array.isArray(plan.week)) {
+            return plan.week[0]
+        }
+
+        // Case 4: plan itself is today's meals
+        if (plan?.breakfast || plan?.lunch || plan?.dinner) {
+            return plan
+        }
+
+        // Additional check for our specific DayPlan struct from MealPlan
+        if (plan?.meals && Array.isArray(plan.meals)) {
+            const mealObj: any = {}
+            plan.meals.forEach((m: any) => {
+                const t = m.type?.toLowerCase() || ''
+                if (t.includes('breakfast')) mealObj.breakfast = m.name || m
+                else if (t.includes('lunch')) mealObj.lunch = m.name || m
+                else if (t.includes('dinner')) mealObj.dinner = m.name || m
+                else if (t.includes('snack')) mealObj.snack = m.name || m
+            })
+            if (Object.keys(mealObj).length > 0) return mealObj
+        }
+
+        return null
+    } catch { return null }
+}
+
 export function Dashboard() {
     const navigate = useNavigate()
     const [sidebarOpen, setSidebarOpen] = useState(false)
     const [user, setUser] = useState<UserProfile | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState('')
-    const [plan, setPlan] = useState<DayPlan | null>(null)
+
+    // Load meal plan saved by MealPlan page
+    const [todayMeals, setTodayMeals] = useState<any>(null)
+    const [tomorrowMeals, setTomorrowMeals] = useState<any>(null)
+    const [mealHistory, setMealHistory] = useState<any[]>([])
+    const [userProfile, setUserProfile] = useState<any>(null)
+
+    useEffect(() => {
+        // Read generated meal plan
+        try {
+            const savedPlan = localStorage.getItem('nutriai_meal_plan')
+            if (savedPlan) {
+                const planData = JSON.parse(savedPlan)
+
+                // Get today's day name
+                const today = new Date().toLocaleDateString(
+                    'en-US', { weekday: 'long' }) // e.g. "Saturday"
+
+                // Find today's meals from the 7-day plan
+                // Handle different plan structures from Ollama
+                const todayData = extractTodayMeals(planData, today)
+                setTodayMeals(todayData)
+
+                // Get tomorrow's day name
+                const tomorrowDate = new Date()
+                tomorrowDate.setDate(tomorrowDate.getDate() + 1)
+                const tomorrow = tomorrowDate.toLocaleDateString('en-US', { weekday: 'long' })
+                const tomorrowData = extractTodayMeals(planData, tomorrow)
+                setTomorrowMeals(tomorrowData)
+            }
+        } catch (e) { console.error(e) }
+
+        // Read meal history
+        try {
+            const history = localStorage.getItem('nutriai_meal_history')
+            if (history) setMealHistory(JSON.parse(history))
+        } catch (e) { }
+
+        // Read user profile for stats
+        try {
+            const profile = localStorage.getItem('nutriai_profile')
+            if (profile) setUserProfile(JSON.parse(profile))
+        } catch (e) { }
+    }, [])
 
     // Fetch user profile on mount
     useEffect(() => {
-        const savedPlan = localStorage.getItem('nutriai_meal_plan')
-        if (savedPlan) {
-            try {
-                setPlan(JSON.parse(savedPlan))
-            } catch (err) {
-                console.error("Failed to parse meal plan from localStorage", err)
-            }
-        }
         const token = localStorage.getItem('token')
         if (!token) {
             navigate('/signin')
@@ -340,66 +409,153 @@ export function Dashboard() {
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 sm:gap-6 min-h-0 lg:min-h-[400px]">
                                 {/* Col A: Today's Meals (Span 5) */}
                                 <div className="md:col-span-2 lg:col-span-5 flex flex-col bg-white rounded-2xl shadow-sm border border-[#e2e8f0] overflow-hidden min-h-[400px]">
-                                    <div className="p-4 sm:p-5 px-4 sm:px-6 border-b border-slate-200 flex justify-between items-center">
-                                        <h3 className="text-sm sm:text-base font-bold text-[#0f172a]">Today's Meals</h3>
-                                        <button onClick={() => navigate('/meal-plan')} className="text-xs sm:text-sm text-[#22c55e] font-medium hover:underline">Edit Plan</button>
+                                    <div className="flex items-center justify-between p-4 sm:p-5 px-4 sm:px-6 border-b border-[#e2e8f0]">
+                                        <h3 className="text-sm sm:text-base font-bold text-[#0f172a]">
+                                            Today's Meals
+                                        </h3>
+                                        <button
+                                            onClick={() => navigate('/meal-plan')}
+                                            className="text-[12px] sm:text-[13px] text-[#22c55e] font-semibold hover:text-[#16a34a]"
+                                        >
+                                            Edit Plan →
+                                        </button>
                                     </div>
+
                                     <div className="flex-1 p-3 sm:p-4 space-y-2 sm:space-y-3 overflow-y-auto">
-                                        {plan?.meals && plan.meals.length > 0 ? (
-                                            plan.meals.map((meal, index) => {
-                                                const type = meal.type || 'Meal';
+                                        {todayMeals ? (
+                                            // ── HAS MEAL PLAN ──
+                                            <div className="space-y-2">
+                                                {(() => {
+                                                    const currentHour = new Date().getHours()
+                                                    return [
+                                                        {
+                                                            type: 'BREAKFAST',
+                                                            icon: '🌅',
+                                                            meal: todayMeals.breakfast,
+                                                            time: '8:00 AM',
+                                                            status: currentHour >= 8 ? 'done' : 'upcoming'
+                                                        },
+                                                        {
+                                                            type: 'LUNCH',
+                                                            icon: '☀️',
+                                                            meal: todayMeals.lunch,
+                                                            time: '1:00 PM',
+                                                            status: currentHour >= 13 ? 'done' : 'upcoming'
+                                                        },
+                                                        todayMeals.snack && {
+                                                            type: 'SNACK',
+                                                            icon: '🍎',
+                                                            meal: todayMeals.snack,
+                                                            time: '4:00 PM',
+                                                            status: currentHour >= 16 ? 'done' : 'upcoming'
+                                                        },
+                                                        {
+                                                            type: 'DINNER',
+                                                            icon: '🌙',
+                                                            meal: todayMeals.dinner,
+                                                            time: '7:00 PM',
+                                                            status: currentHour >= 19 ? 'done' : 'upcoming'
+                                                        },
+                                                    ]
+                                                        .filter(item => item && item.meal)
 
-                                                let icon = 'restaurant';
-                                                let isHighlighted = false;
-
-                                                if (type.toLowerCase().includes('breakfast')) { icon = 'egg_alt'; }
-                                                else if (type.toLowerCase().includes('lunch')) { icon = 'lunch_dining'; }
-                                                else if (type.toLowerCase().includes('dinner')) { icon = 'restaurant'; isHighlighted = true; }
-                                                else if (type.toLowerCase().includes('snack')) { icon = 'cookie'; }
-
-                                                if (isHighlighted) {
-                                                    return (
-                                                        <div key={index} className="flex items-center p-2.5 sm:p-3 rounded-[10px] bg-[#fffbeb] border border-amber-100">
-                                                            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white flex items-center justify-center text-[#f97316] mr-3 sm:mr-4 shadow-sm shrink-0">
-                                                                <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                                                        .map((item: any, idx: number) => (
+                                                            <div key={idx}
+                                                                className={`flex items-center justify-between px-3 py-2.5 rounded-xl border transition-all ${item.status === 'upcoming' ? 'bg-[#fffbeb] border-[#fde68a]' : 'bg-[#f8fafc] border-[#e2e8f0]'
+                                                                    }`}
+                                                            >
+                                                                <div className="flex items-center gap-3">
+                                                                    <span className="text-base w-6 text-center">{item.icon}</span>
+                                                                    <div>
+                                                                        <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">
+                                                                            {item.type}
+                                                                            {item.status === 'upcoming' && (
+                                                                                <span className="ml-2 text-[#f97316]">•   UPCOMING</span>
+                                                                            )}
+                                                                        </p>
+                                                                        <p className="text-[12px] sm:text-[13px] font-semibold text-[#0f172a] leading-tight mt-0.5">
+                                                                            {/* Clean meal name — remove extra text */}
+                                                                            {typeof item.meal === 'string'
+                                                                                ? item.meal.split('(')[0].trim()
+                                                                                : item.meal?.name || 'See meal plan'}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="text-right">
+                                                                    <span className={`text-[10px] sm:text-[11px] px-2 py-1 rounded-lg font-semibold ${item.status === 'done' ? 'bg-[#dcfce7] text-[#16a34a]' : 'bg-[#fff7ed] text-[#f97316]'
+                                                                        }`}>
+                                                                        {item.status === 'done' ? '✓ Done' : item.time}
+                                                                    </span>
+                                                                </div>
                                                             </div>
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-[10px] sm:text-[11px] font-bold text-[#f97316] uppercase tracking-wide">{type}</p>
-                                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">{meal.name}</p>
-                                                            </div>
-                                                            <div className="text-right shrink-0 ml-2">
-                                                                <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#fff7ed] text-[#f97316]">
-                                                                    Plan
+                                                        ))
+                                                })()}
+
+                                                {/* Tomorrow's First Meal */}
+                                                {tomorrowMeals && (tomorrowMeals.breakfast || tomorrowMeals.lunch) && (
+                                                    <div className="pt-3 mt-2 border-t border-dashed border-[#e2e8f0]">
+                                                        <p className="text-[10px] sm:text-[11px] font-bold text-[#94a3b8] uppercase tracking-wide mb-2 pl-1">
+                                                            Tomorrow's Plan
+                                                        </p>
+                                                        <div className="flex items-center justify-between px-3 py-2.5 rounded-xl border bg-[#f8fafc] border-[#e2e8f0] opacity-80 hover:opacity-100 transition-opacity cursor-default">
+                                                            <div className="flex items-center gap-3">
+                                                                <span className="text-base w-6 text-center">
+                                                                    {tomorrowMeals.breakfast ? '🌅' : '☀️'}
                                                                 </span>
-                                                                <p className="text-[12px] sm:text-[13px] text-[#0f172a] mt-1 font-medium">{meal.calories || '-- kcal'}</p>
+                                                                <div>
+                                                                    <p className="text-[10px] font-bold text-[#94a3b8] uppercase tracking-wide">
+                                                                        {tomorrowMeals.breakfast ? 'BREAKFAST' : 'LUNCH'}
+                                                                    </p>
+                                                                    <p className="text-[12px] sm:text-[13px] font-semibold text-[#0f172a] leading-tight mt-0.5">
+                                                                        {typeof (tomorrowMeals.breakfast || tomorrowMeals.lunch) === 'string'
+                                                                            ? (tomorrowMeals.breakfast || tomorrowMeals.lunch).split('(')[0].trim()
+                                                                            : (tomorrowMeals.breakfast || tomorrowMeals.lunch)?.name || 'See meal plan'}
+                                                                    </p>
+                                                                </div>
                                                             </div>
-                                                        </div>
-                                                    )
-                                                }
-
-                                                return (
-                                                    <div key={index} className="flex items-center p-2.5 sm:p-3 rounded-xl hover:bg-slate-50 transition-colors group">
-                                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#f0fdf4] flex items-center justify-center text-[#16a34a] mr-3 sm:mr-4 shrink-0">
-                                                            <span className="material-symbols-outlined text-[20px]">{icon}</span>
-                                                        </div>
-                                                        <div className="flex-1 min-w-0">
-                                                            <p className="text-[10px] sm:text-[11px] font-semibold text-[#94a3b8] uppercase tracking-wide">{type}</p>
-                                                            <p className="text-[13px] sm:text-[14px] font-semibold text-[#0f172a] truncate">{meal.name}</p>
-                                                        </div>
-                                                        <div className="text-right shrink-0 ml-2">
-                                                            <span className="inline-flex items-center px-1.5 sm:px-2 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium bg-[#dcfce7] text-[#16a34a]">
-                                                                Plan
-                                                            </span>
-                                                            <p className="text-[12px] sm:text-[13px] text-[#64748b] mt-1">{meal.calories || '-- kcal'}</p>
+                                                            <div className="text-right">
+                                                                <span className="text-[10px] sm:text-[11px] px-2 py-1 rounded-lg font-semibold bg-[#f1f5f9] text-[#64748b]">
+                                                                    Upcoming
+                                                                </span>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                )
-                                            })
+                                                )}
+
+                                                {/* Total calories from profile */}
+                                                {userProfile?.calories && (
+                                                    <div className="pt-3 mt-2 border-t border-[#f1f5f9] flex items-center justify-between">
+                                                        <span className="text-[12px] text-[#64748b]">Daily target</span>
+                                                        <span className="text-[12px] font-bold text-[#f97316]">
+                                                            🔥 {userProfile.calories} kcal
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {userProfile?.bmi && !userProfile?.calories && (
+                                                    <div className="pt-3 mt-2 border-t border-[#f1f5f9] flex items-center justify-between">
+                                                        <span className="text-[12px] text-[#64748b]">Daily target</span>
+                                                        <span className="text-[12px] font-bold text-[#f97316]">
+                                                            🔥 ~2000 kcal
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         ) : (
-                                            <div className="flex flex-col items-center justify-center h-full text-center py-6">
-                                                <span className="material-symbols-outlined text-[40px] text-slate-300 mb-2">restaurant</span>
-                                                <p className="text-sm font-medium text-slate-500">No meals planned today</p>
-                                                <button onClick={() => navigate('/meal-plan')} className="mt-2 text-xs text-[#22c55e] font-semibold hover:underline">Generate Plan</button>
+                                            // ── NO MEAL PLAN YET ──
+                                            <div className="flex flex-col items-center justify-center py-8 text-center h-full">
+                                                <span className="text-[32px] sm:text-4xl mb-3">🍽️</span>
+                                                <p className="text-[13px] sm:text-[14px] font-semibold text-[#374151] mb-1">
+                                                    No meals planned today
+                                                </p>
+                                                <p className="text-[11px] sm:text-[12px] text-[#94a3b8] mb-4">
+                                                    Generate your personalized meal plan
+                                                </p>
+                                                <button
+                                                    onClick={() => navigate('/meal-plan')}
+                                                    className="bg-[#22c55e] text-white text-[12px] sm:text-[13px] font-semibold px-4 sm:px-5 py-2 rounded-xl hover:bg-[#16a34a] transition-colors"
+                                                >
+                                                    Generate Plan →
+                                                </button>
                                             </div>
                                         )}
                                     </div>
@@ -605,6 +761,43 @@ export function Dashboard() {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Plan History */}
+                            {mealHistory.length > 0 && (
+                                <div className="bg-white rounded-2xl shadow-sm border border-[#e2e8f0] p-4 sm:p-5 px-4 sm:px-6 mb-6">
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h3 className="font-bold text-[#0f172a] text-[15px]">📋 Plan History</h3>
+                                        <span className="text-[12px] text-[#94a3b8]">Last {mealHistory.length} plans</span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {mealHistory.map((entry: any, idx: number) => (
+                                            <div key={entry.id}
+                                                className={`flex items-center justify-between px-4 py-3 rounded-xl border cursor-pointer hover:border-[#22c55e] hover:bg-[#f0fdf4] transition-all ${idx === 0 ? 'border-[#22c55e] bg-[#f0fdf4]' : 'border-[#e2e8f0] bg-[#f8fafc]'
+                                                    }`}
+                                                onClick={() => navigate('/meal-plan')}
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${idx === 0 ? 'bg-[#22c55e] text-white' : 'bg-[#e2e8f0] text-[#64748b]'
+                                                        }`}>
+                                                        <span className="text-sm">📅</span>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[13px] font-semibold text-[#0f172a]">
+                                                            {entry.weekLabel}
+                                                            {idx === 0 && (
+                                                                <span className="ml-2 text-[10px] bg-[#22c55e] text-white px-2 py-0.5 rounded-full">Current</span>
+                                                            )}
+                                                        </p>
+                                                        <p className="text-[11px] text-[#94a3b8]">Generated on {entry.date} · {entry.totalDays || 7}-day plan</p>
+                                                    </div>
+                                                </div>
+                                                <span className="text-[12px] text-[#22c55e] font-medium">View →</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                         </>
                     )}
                 </main>
